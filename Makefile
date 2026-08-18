@@ -2,7 +2,7 @@ PY := uv run
 PATH := $(HOME)/.local/bin:$(PATH)
 export PATH
 
-.PHONY: help install test lint typecheck build format dev py-install py-test py-lint
+.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart
 
 help:
 	@echo "Gotardo Finanças — monorepo"
@@ -20,6 +20,14 @@ help:
 	@echo "  py-install    cria .venv e instala dev de ml e ocr"
 	@echo "  py-test       pytest de ml e ocr"
 	@echo "  py-lint       ruff check de ml e ocr"
+	@echo ""
+	@echo "Infra (docker compose dev — postgres, redis, minio):"
+	@echo "  infra-up      sobe a infraestrutura em segundo plano"
+	@echo "  infra-logs    acompanha os logs da infraestrutura"
+	@echo "  infra-ps      status dos serviços de infraestrutura"
+	@echo "  infra-down    para a infraestrutura (mantém os volumes)"
+	@echo "  infra-down-volumes  para e apaga os dados (postgres, redis, minio)"
+	@echo "  infra-restart reinicia a infraestrutura"
 
 install:
 	pnpm install
@@ -55,3 +63,23 @@ py-test:
 py-lint:
 	services/ml/.venv/bin/ruff check services/ml
 	services/ocr/.venv/bin/ruff check services/ocr
+
+COMPOSE := docker compose -f compose.dev.yaml
+
+infra-up:
+	$(COMPOSE) up -d
+
+infra-logs:
+	$(COMPOSE) logs -f
+
+infra-ps:
+	$(COMPOSE) ps
+
+infra-down:
+	$(COMPOSE) down
+
+infra-down-volumes:
+	$(COMPOSE) down -v
+
+infra-restart:
+	$(COMPOSE) restart

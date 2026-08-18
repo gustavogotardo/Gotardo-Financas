@@ -21,9 +21,9 @@ services/
 - **Backend**: NestJS (Node/TypeScript), REST + OpenAPI
 - **Frontend**: Next.js + TypeScript
 - **Serviços Python**: FastAPI, gerenciados com uv
-- **Fila/async**: Redis + BullMQ (próxima etapa)
-- **Banco**: PostgreSQL 16 + Prisma (próxima etapa)
-- **Documentos**: MinIO, S3-compatível (próxima etapa)
+- **Fila/async**: Redis + BullMQ (Redis provisionado; BullMQ na E0.7)
+- **Banco**: PostgreSQL 16 + Prisma (PostgreSQL provisionado; Prisma na E0.4)
+- **Documentos**: MinIO, S3-compatível (provisionado; integração na fase de importação)
 - **Deploy**: servidor físico (on-prem), Docker Compose (próxima etapa)
 
 ## Requisitos
@@ -55,6 +55,14 @@ pnpm build
 make py-test
 make py-lint
 
+# infraestrutura de desenvolvimento (PostgreSQL, Redis, MinIO)
+cp .env.example .env   # uma vez, para ajustar credenciais/portas
+make infra-up          # sobe postgres, redis e minio (minio-init cria os buckets)
+make infra-ps          # status
+make infra-logs        # logs
+make infra-down        # para (mantém os dados)
+make infra-down-volumes # para e apaga os dados
+
 # formatação
 pnpm format
 ```
@@ -65,8 +73,14 @@ Fase E0.1 (fundação do monorepo) concluída: estrutura de workspaces, configs 
 (TS, ESLint flat, Prettier, editorconfig), health endpoints na API, nos serviços
 Python e página inicial no web, com todas as validações passando.
 
-Próximas etapas do backlog: E0.3 (docker-compose dev), E0.4 (schema Prisma),
-E0.5/E0.6 (autenticação e isolamento por tenant).
+Fase E0.3 (docker-compose dev) concluída: infraestrutura de desenvolvimento
+(PostgreSQL 16, Redis 7, MinIO) provisionada via `compose.dev.yaml`, com
+healthchecks, volumes persistentes, criação automática dos buckets e targets no
+Makefile (`make infra-up`). Apps e serviços Python continuam rodando no host
+(`pnpm dev` / uv) para hot-reload rápido.
+
+Próximas etapas do backlog: E0.4 (schema Prisma), E0.5/E0.6 (autenticação e
+isolamento por tenant).
 
 ## Decisões de produto
 
