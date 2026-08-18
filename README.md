@@ -2,6 +2,9 @@
 
 Sistema de gerenciamento e planejamento financeiro familiar — **SaaS multi-tenant**, contexto brasileiro (BRL/LGPD). Este é o monorepo do produto.
 
+> Planejamento detalhado (roadmap, escopo por fase e critérios de aceite):
+> [docs/planejamento.md](docs/planejamento.md)
+
 ## Estrutura
 
 ```
