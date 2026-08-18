@@ -22,7 +22,7 @@ services/
 - **Frontend**: Next.js + TypeScript
 - **Serviços Python**: FastAPI, gerenciados com uv
 - **Fila/async**: Redis + BullMQ (Redis provisionado; BullMQ na E0.7)
-- **Banco**: PostgreSQL 16 + Prisma (PostgreSQL provisionado; Prisma na E0.4)
+- **Banco**: PostgreSQL 16 + Prisma (`packages/db`)
 - **Documentos**: MinIO, S3-compatível (provisionado; integração na fase de importação)
 - **Deploy**: servidor físico (on-prem), Docker Compose (próxima etapa)
 
@@ -50,6 +50,11 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+
+# banco de dados (Prisma em packages/db)
+pnpm --filter @gotardo/db db:migrate   # nova migration de desenvolvimento
+pnpm --filter @gotardo/db db:deploy    # aplica migrations (prod)
+pnpm --filter @gotardo/db db:studio    # Prisma Studio
 
 # validações Python
 make py-test
@@ -79,8 +84,12 @@ healthchecks, volumes persistentes, criação automática dos buckets e targets 
 Makefile (`make infra-up`). Apps e serviços Python continuam rodando no host
 (`pnpm dev` / uv) para hot-reload rápido.
 
-Próximas etapas do backlog: E0.4 (schema Prisma), E0.5/E0.6 (autenticação e
-isolamento por tenant).
+Fase E0.4 (schema Prisma) concluída: pacote `packages/db` com o schema do domínio
+(tenant `Family`, usuários, contas, categorias hierárquicas, envelopes com
+alocações, transações, documentos e regras recorrentes), enums espelhando
+`packages/shared`, migration inicial aplicada no PostgreSQL e client gerado.
+
+Próximas etapas do backlog: E0.5/E0.6 (autenticação e isolamento por tenant).
 
 ## Decisões de produto
 

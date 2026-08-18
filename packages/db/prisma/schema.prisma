@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums (espelham packages/shared) ---
+
+enum Currency {
+  BRL
+}
+
+enum FamilyRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  INVESTMENT
+  CASH
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  REVIEW
+}
+
+enum TransactionSource {
+  MANUAL
+  IMPORT
+  RECURRING
+  OCR
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+// --- Tenant (isolamento por família) ---
+
+model Family {
+  id             String           @id @default(cuid())
+  name           String
+  currency       Currency         @default(BRL)
+  users          User[]
+  accounts       Account[]
+  categories     Category[]
+  envelopes      Envelope[]
+  transactions   Transaction[]
+  documents      Document[]
+  recurringRules RecurringRule[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  role         FamilyRole @default(MEMBER)
+  familyId     String
+  family       Family     @relation(fields: [familyId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([familyId])
+}
+
+// --- Contas e categorias ---
+
+model Account {
+  id             String          @id @default(cuid())
+  familyId       String
+  family         Family          @relation(fields: [familyId], references: [id])
+  name           String
+  type           AccountType     @default(CHECKING)
+  institution    String?
+  currency       Currency        @default(BRL)
+  balance        Decimal         @default(0) @db.Decimal(12, 2)
+  isArchived     Boolean         @default(false)
+  transactions   Transaction[]
+  recurringRules RecurringRule[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+
+  @@index([familyId])
+}
+
+model Category {
+  id             String           @id @default(cuid())
+  familyId       String
+  family         Family           @relation(fields: [familyId], references: [id])
+  name           String
+  icon           String?
+  parentId       String?
+  parent         Category?        @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children       Category[]       @relation("CategoryHierarchy")
+  transactions   Transaction[]
+  recurringRules RecurringRule[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([familyId])
+  @@index([parentId])
+}
+
+// --- Orçamento por envelopes ---
+
+model Envelope {
+  id           String               @id @default(cuid())
+  familyId     String
+  family       Family               @relation(fields: [familyId], references: [id])
+  name         String
+  icon         String?
+  color        String?
+  targetAmount Decimal?             @db.Decimal(12, 2)
+  isActive     Boolean              @default(true)
+  transactions Transaction[]
+  allocations  EnvelopeAllocation[]
+  recurringRules RecurringRule[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([familyId])
+}
+
+model EnvelopeAllocation {
+  id         String   @id @default(cuid())
+  envelopeId String
+  envelope   Envelope @relation(fields: [envelopeId], references: [id])
+  amount     Decimal  @db.Decimal(12, 2)
+  date       DateTime
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([envelopeId])
+}
+
+// --- Transações ---
+
+model Transaction {
+  id            String             @id @default(cuid())
+  familyId      String
+  family        Family             @relation(fields: [familyId], references: [id])
+  accountId     String
+  account       Account            @relation(fields: [accountId], references: [id])
+  categoryId    String?
+  category      Category?          @relation(fields: [categoryId], references: [id])
+  envelopeId    String?
+  envelope      Envelope?          @relation(fields: [envelopeId], references: [id])
+  documentId    String?
+  document      Document?          @relation(fields: [documentId], references: [id])
+  date          DateTime
+  description   String
+  amount        Decimal            @db.Decimal(12, 2)
+  type          TransactionType    @default(EXPENSE)
+  status        TransactionStatus  @default(PENDING)
+  source        TransactionSource  @default(MANUAL)
+  externalId    String?
+  paymentMethod String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  deletedAt     DateTime?
+
+  @@index([familyId])
+  @@index([accountId])
+  @@index([categoryId])
+  @@index([envelopeId])
+  @@index([date])
+}
+
+// --- Documentos (importação/OCR) e regras recorrentes ---
+
+model Document {
+  id            String           @id @default(cuid())
+  familyId      String
+  family        Family           @relation(fields: [familyId], references: [id])
+  storageKey    String
+  originalName  String
+  mimeType      String
+  sizeBytes     Int
+  status        DocumentStatus   @default(PENDING)
+  extractedText String?
+  transactions  Transaction[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  deletedAt     DateTime?
+
+  @@index([familyId])
+}
+
+model RecurringRule {
+  id          String              @id @default(cuid())
+  familyId    String
+  family      Family              @relation(fields: [familyId], references: [id])
+  accountId   String
+  account     Account             @relation(fields: [accountId], references: [id])
+  categoryId  String?
+  category    Category?           @relation(fields: [categoryId], references: [id])
+  envelopeId  String?
+  envelope    Envelope?           @relation(fields: [envelopeId], references: [id])
+  description String
+  amount      Decimal             @db.Decimal(12, 2)
+  type        TransactionType     @default(EXPENSE)
+  frequency   RecurrenceFrequency @default(MONTHLY)
+  dayOfMonth  Int?
+  startDate   DateTime
+  endDate     DateTime?
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  deletedAt   DateTime?
+
+  @@index([familyId])
+  @@index([accountId])
+}
