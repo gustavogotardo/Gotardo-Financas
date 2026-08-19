@@ -101,8 +101,13 @@ rotação e revogação, guard global (rotas públicas marcadas com `@Public`), 
 limit em auth, convites por token, troca de papéis, e primeiro módulo de domínio
 isolado (contas). Testes e2e cobrem o cruzamento de tenants (retorna 404).
 
-Próximas etapas do backlog: E0.8 (CRUD de contas/categorias com isolamento),
-E0.9 (transações), até o marco ALFA (E0.12, deploy on-prem).
+Fase E0.8 (contas e categorias) concluída: CRUD de contas e categorias
+hierárquicas (subcategoria via `parentId`) com isolamento por família. Papéis:
+OWNER/ADMIN gerenciam; MEMBER/VIEWER somente leem. Hierarquia protegida contra
+ciclos e exclusão de categoria com subcategorias.
+
+Próximas etapas do backlog: E0.9 (transações), E0.10 (envelopes), até o marco
+ALFA (E0.12, deploy on-prem).
 
 ## Decisões de produto
 

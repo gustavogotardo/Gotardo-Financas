@@ -83,8 +83,15 @@ Sequência até o alfa (após E0.5/E0.6):
   volumes e criação automática de buckets; targets `make infra-*`.
 - **E0.4 — Schema Prisma**: `packages/db` com o modelo de dados completo, migration
   inicial aplicada, client gerado.
+- **E0.5/E0.6 — Autenticação e isolamento por tenant**: registro/login (argon2id),
+  sessão JWT + refresh com rotação/revogação, guard global por tenant, convites e
+  troca de papéis, rate limit. Correções: concessão de OWNER restrita ao OWNER,
+  rotação atômica no refresh e aceite de convite em transação.
+- **E0.8 — Contas e categorias**: CRUD de contas e categorias hierárquicas com
+  isolamento por família; OWNER/ADMIN gerenciam, MEMBER/VIEWER leem. Proteção de
+  ciclos na hierarquia e de exclusão com subcategorias.
 
-### E0.5/E0.6 — Autenticação e isolamento por tenant (PRÓXIMA)
+### E0.5/E0.6 — Autenticação e isolamento por tenant
 
 Objetivo: registro/login e garantia de que nenhum dado cruza famílias.
 
@@ -129,7 +136,7 @@ campos já presentes em `User` (passwordHash, role, familyId).
 - Categorias hierárquicas (subcategoria via `parentId`).
 - Restrições por papel (OWNER/ADMIN gerenciam; MEMBER/VIEWER leem).
 
-### E0.9 — Transações
+### E0.9 — Transações (PRÓXIMA)
 
 - CRUD de `Transaction` (manual), vínculo com conta, categoria e envelope.
 - Atualização do saldo da conta ao confirmar transação.

@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { FamilyModule } from './family/family.module';
 import { AccountsModule } from './accounts/accounts.module';
+import { CategoriesModule } from './categories/categories.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -19,6 +20,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     AuthModule,
     FamilyModule,
     AccountsModule,
+    CategoriesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

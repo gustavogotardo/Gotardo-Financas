@@ -9,6 +9,7 @@ import { PrismaModule, PrismaService } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { FamilyModule } from '../family/family.module';
 import { AccountsModule } from '../accounts/accounts.module';
+import { CategoriesModule } from '../categories/categories.module';
 import { HealthModule } from '../health/health.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -54,6 +55,7 @@ describe('Auth e isolamento de tenant (e2e)', () => {
         AuthModule,
         FamilyModule,
         AccountsModule,
+        CategoriesModule,
         HealthModule,
       ],
       providers: [
@@ -74,6 +76,7 @@ describe('Auth e isolamento de tenant (e2e)', () => {
   afterAll(async () => {
     if (createdFamilies.length > 0) {
       await prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } });
+      await prisma.category.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.invitation.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.refreshToken.deleteMany({
         where: { user: { familyId: { in: createdFamilies } } },
@@ -300,5 +303,177 @@ describe('Auth e isolamento de tenant (e2e)', () => {
       .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
       .send({ role: 'OWNER' });
     expect(ownerGrants.status).toBe(200);
+  });
+
+  it('categorias: CRUD hierárquico, isolamento e restrições de ciclo', async () => {
+    const emailA = emailFor('cat-a');
+    const regA = await register('Cat A', emailA, `Família Cat A ${suffix}`);
+    const tokensA = regA.body as TokensResponse;
+    const meA = await me(tokensA.accessToken);
+    createdFamilies.push((meA.body as MeResponse).familyId);
+
+    const createRoot = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ name: 'Alimentação', icon: '🍔' });
+    expect(createRoot.status).toBe(201);
+    const root = createRoot.body as { id: string; name: string; parentId: string | null };
+
+    const createChild = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ name: 'Restaurantes', parentId: root.id });
+    expect(createChild.status).toBe(201);
+    const child = createChild.body as { id: string; parentId: string | null };
+    expect(child.parentId).toBe(root.id);
+
+    const list = await request(app.getHttpServer())
+      .get('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokensA.accessToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body as { id: string }[]).toHaveLength(2);
+
+    const patchName = await request(app.getHttpServer())
+      .patch(`/api/v1/categories/${child.id}`)
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ name: 'Lanchonetes' });
+    expect(patchName.status).toBe(200);
+    expect((patchName.body as { name: string }).name).toBe('Lanchonetes');
+
+    const selfParent = await request(app.getHttpServer())
+      .patch(`/api/v1/categories/${child.id}`)
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ parentId: child.id });
+    expect(selfParent.status).toBe(400);
+
+    const cycle = await request(app.getHttpServer())
+      .patch(`/api/v1/categories/${root.id}`)
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ parentId: child.id });
+    expect(cycle.status).toBe(400);
+
+    const deleteWithChildren = await request(app.getHttpServer())
+      .delete(`/api/v1/categories/${root.id}`)
+      .set('Authorization', `Bearer ${tokensA.accessToken}`);
+    expect(deleteWithChildren.status).toBe(409);
+
+    const crossTenant = await request(app.getHttpServer())
+      .get(`/api/v1/categories/${child.id}`)
+      .set('Authorization', `Bearer ${tokensA.accessToken}`);
+    expect(crossTenant.status).toBe(200);
+
+    const emailB = emailFor('cat-b');
+    const regB = await register('Cat B', emailB, `Família Cat B ${suffix}`);
+    const tokensB = regB.body as TokensResponse;
+    const meB = await me(tokensB.accessToken);
+    createdFamilies.push((meB.body as MeResponse).familyId);
+
+    const listB = await request(app.getHttpServer())
+      .get('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(listB.status).toBe(200);
+    expect(listB.body).toHaveLength(0);
+
+    const getB = await request(app.getHttpServer())
+      .get(`/api/v1/categories/${root.id}`)
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(getB.status).toBe(404);
+
+    const createWithForeignParent = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokensB.accessToken}`)
+      .send({ name: 'Invasora', parentId: root.id });
+    expect(createWithForeignParent.status).toBe(404);
+
+    const deleteChild = await request(app.getHttpServer())
+      .delete(`/api/v1/categories/${child.id}`)
+      .set('Authorization', `Bearer ${tokensA.accessToken}`);
+    expect(deleteChild.status).toBe(204);
+
+    const deleteRoot = await request(app.getHttpServer())
+      .delete(`/api/v1/categories/${root.id}`)
+      .set('Authorization', `Bearer ${tokensA.accessToken}`);
+    expect(deleteRoot.status).toBe(204);
+  });
+
+  it('MEMBER lê contas e categorias mas não escreve', async () => {
+    const emailOwner = emailFor('perm-owner');
+    const regOwner = await register('Perm Owner', emailOwner, `Família Perm ${suffix}`);
+    const tokensOwner = regOwner.body as TokensResponse;
+    const meOwner = await me(tokensOwner.accessToken);
+    createdFamilies.push((meOwner.body as MeResponse).familyId);
+
+    const account = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ name: 'Conta Perm' });
+    expect(account.status).toBe(201);
+    const accountId = (account.body as { id: string }).id;
+
+    const category = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ name: 'Categoria Perm' });
+    expect(category.status).toBe(201);
+    const categoryId = (category.body as { id: string }).id;
+
+    const invite = await request(app.getHttpServer())
+      .post('/api/v1/family/invitations')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ email: emailFor('perm-member') });
+    expect(invite.status).toBe(201);
+    const accept = await request(app.getHttpServer())
+      .post('/api/v1/auth/accept-invitation')
+      .send({
+        token: (invite.body as { inviteToken: string }).inviteToken,
+        name: 'Perm Member',
+        password: 'senha-segura-123',
+      });
+    const tokensMember = accept.body as TokensResponse;
+
+    const memberListAccounts = await request(app.getHttpServer())
+      .get('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`);
+    expect(memberListAccounts.status).toBe(200);
+    expect(memberListAccounts.body as { id: string }[]).toHaveLength(1);
+
+    const memberGetAccount = await request(app.getHttpServer())
+      .get(`/api/v1/accounts/${accountId}`)
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`);
+    expect(memberGetAccount.status).toBe(200);
+
+    const memberCreateAccount = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`)
+      .send({ name: 'Invadida' });
+    expect(memberCreateAccount.status).toBe(403);
+
+    const memberPatchAccount = await request(app.getHttpServer())
+      .patch(`/api/v1/accounts/${accountId}`)
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`)
+      .send({ name: 'Invadida' });
+    expect(memberPatchAccount.status).toBe(403);
+
+    const memberDeleteAccount = await request(app.getHttpServer())
+      .delete(`/api/v1/accounts/${accountId}`)
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`);
+    expect(memberDeleteAccount.status).toBe(403);
+
+    const memberListCategories = await request(app.getHttpServer())
+      .get('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`);
+    expect(memberListCategories.status).toBe(200);
+
+    const memberCreateCategory = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`)
+      .send({ name: 'Invadida' });
+    expect(memberCreateCategory.status).toBe(403);
+
+    const memberPatchCategory = await request(app.getHttpServer())
+      .patch(`/api/v1/categories/${categoryId}`)
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`)
+      .send({ name: 'Invadida' });
+    expect(memberPatchCategory.status).toBe(403);
   });
 });
