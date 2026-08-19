@@ -20,6 +20,8 @@ import {
   statusLabel,
 } from '@/lib/format';
 import { Badge, Button, Card, ErrorBox, Spinner, StatCard } from '@/components/ui';
+import { AccountForm } from '@/components/account-form';
+import { CategoryForm } from '@/components/category-form';
 import { TransactionForm } from '@/components/transaction-form';
 
 const MONTH_FORMAT = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
@@ -66,6 +68,9 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showAccountForm, setShowAccountForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -142,6 +147,24 @@ export default function DashboardPage() {
     router.replace('/login');
   }
 
+  async function confirmTransaction(id: string) {
+    setConfirmingId(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/v1/transactions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'CONFIRMED' }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao confirmar a transação.');
+    } finally {
+      setConfirmingId(null);
+    }
+  }
+
+  const canManage = user.role === 'OWNER' || user.role === 'ADMIN';
+
   return (
     <div>
       <header className="topbar">
@@ -176,7 +199,7 @@ export default function DashboardPage() {
             <Button type="button" variant="ghost" onClick={() => void load()}>
               Atualizar
             </Button>
-            {user.role === 'OWNER' || user.role === 'ADMIN' ? (
+            {canManage ? (
               <Button type="button" onClick={() => setShowForm((show) => !show)}>
                 {showForm ? 'Fechar' : 'Nova transação'}
               </Button>
@@ -214,7 +237,27 @@ export default function DashboardPage() {
             </div>
 
             <section className="section">
-              <h2>Contas</h2>
+              <div className="section-head">
+                <h2>Contas</h2>
+                {canManage ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowAccountForm((show) => !show)}
+                  >
+                    {showAccountForm ? 'Fechar' : '+ Nova conta'}
+                  </Button>
+                ) : null}
+              </div>
+              {showAccountForm ? (
+                <AccountForm
+                  onCancel={() => setShowAccountForm(false)}
+                  onCreated={async () => {
+                    setShowAccountForm(false);
+                    await load();
+                  }}
+                />
+              ) : null}
               <Card>
                 {data.accounts.length === 0 ? (
                   <p className="empty">Nenhuma conta cadastrada ainda.</p>
@@ -235,6 +278,56 @@ export default function DashboardPage() {
                           <td>{accountTypeLabel(account.type)}</td>
                           <td className="muted">{account.institution ?? '—'}</td>
                           <td className="td-num">{brl(account.balance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            </section>
+
+            <section className="section">
+              <div className="section-head">
+                <h2>Categorias</h2>
+                {canManage ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowCategoryForm((show) => !show)}
+                  >
+                    {showCategoryForm ? 'Fechar' : '+ Nova categoria'}
+                  </Button>
+                ) : null}
+              </div>
+              {showCategoryForm ? (
+                <CategoryForm
+                  categories={data.categories}
+                  onCancel={() => setShowCategoryForm(false)}
+                  onCreated={async () => {
+                    setShowCategoryForm(false);
+                    await load();
+                  }}
+                />
+              ) : null}
+              <Card>
+                {data.categories.length === 0 ? (
+                  <p className="empty">Nenhuma categoria cadastrada ainda.</p>
+                ) : (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Nome</th>
+                        <th>Ícone</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.categories.map((category) => (
+                        <tr key={category.id}>
+                          <td>
+                            {category.parentId ? <span className="muted">— </span> : null}
+                            {category.name}
+                          </td>
+                          <td className="muted">{category.icon ?? '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -287,6 +380,7 @@ export default function DashboardPage() {
                           <th>Conta</th>
                           <th>Status</th>
                           <th className="td-num">Valor</th>
+                          {canManage ? <th>Ações</th> : null}
                         </tr>
                       </thead>
                       <tbody>
@@ -300,6 +394,18 @@ export default function DashboardPage() {
                               <td className="muted">{tx.account?.name ?? '—'}</td>
                               <td>
                                 <Badge tone={statusTone(tx.status)}>{statusLabel(tx.status)}</Badge>
+                              </td>
+                              <td>
+                                {canManage && tx.status === 'PENDING' ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    disabled={confirmingId === tx.id}
+                                    onClick={() => void confirmTransaction(tx.id)}
+                                  >
+                                    {confirmingId === tx.id ? 'Confirmando…' : 'Confirmar'}
+                                  </Button>
+                                ) : null}
                               </td>
                               <td className={`td-num ${positive ? 'td-pos' : 'td-neg'}`}>
                                 {positive ? '+' : '−'}

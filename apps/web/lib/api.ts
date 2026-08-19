@@ -73,6 +73,18 @@ export type CreateTransactionInput = {
   date: string;
 };
 
+export type CreateAccountInput = {
+  name: string;
+  type?: string;
+  institution?: string;
+};
+
+export type CreateCategoryInput = {
+  name: string;
+  icon?: string;
+  parentId?: string;
+};
+
 export class ApiError extends Error {
   status: number;
 
