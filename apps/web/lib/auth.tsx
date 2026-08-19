@@ -44,8 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     void bootstrap();
+    const onSessionExpired = () => setUser(null);
+    window.addEventListener('gotardo:session-expired', onSessionExpired);
     return () => {
       active = false;
+      window.removeEventListener('gotardo:session-expired', onSessionExpired);
     };
   }, []);
 

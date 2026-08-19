@@ -102,15 +102,19 @@ export function setTokens(tokens: AuthTokens | null): void {
 
 let refreshPromise: Promise<AuthTokens> | null = null;
 
+function dispatchSessionExpired(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event('gotardo:session-expired'));
+}
+
 async function refreshTokens(): Promise<AuthTokens> {
   if (refreshPromise) return refreshPromise;
 
-  const current = getTokens();
-  if (!current?.refreshToken) {
-    throw new ApiError(401, 'Sessão expirada. Faça login novamente.');
-  }
-
   refreshPromise = (async () => {
+    const current = getTokens();
+    if (!current?.refreshToken) {
+      throw new ApiError(401, 'Sessão expirada. Faça login novamente.');
+    }
     const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -118,6 +122,7 @@ async function refreshTokens(): Promise<AuthTokens> {
     });
     if (!res.ok) {
       setTokens(null);
+      dispatchSessionExpired();
       throw new ApiError(401, 'Sessão expirada. Faça login novamente.');
     }
     const tokens = (await res.json()) as AuthTokens;

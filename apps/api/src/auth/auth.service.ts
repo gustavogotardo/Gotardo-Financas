@@ -80,8 +80,7 @@ export class AuthService {
       throw new UnauthorizedException('Token inválido');
     }
     if (stored.revokedAt || stored.replacedById) {
-      await this.revokeAllForUser(stored.userId);
-      throw new UnauthorizedException('Token reutilizado — sessão revogada');
+      throw new UnauthorizedException('Token inválido');
     }
     if (stored.expiresAt.getTime() < Date.now()) {
       throw new UnauthorizedException('Token expirado');
@@ -92,8 +91,7 @@ export class AuthService {
       data: { revokedAt: new Date(), replacedById: tokens.refreshTokenId },
     });
     if (rotated.count === 0) {
-      await this.revokeAllForUser(stored.userId);
-      throw new UnauthorizedException('Token reutilizado — sessão revogada');
+      throw new UnauthorizedException('Token inválido');
     }
     return tokens;
   }
@@ -186,12 +184,5 @@ export class AuthService {
       })
     ).id;
     return { accessToken, refreshToken, refreshTokenId, expiresIn: parseDuration(accessTtl) };
-  }
-
-  private async revokeAllForUser(userId: string): Promise<void> {
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
   }
 }

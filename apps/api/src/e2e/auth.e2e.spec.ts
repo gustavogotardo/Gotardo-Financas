@@ -166,7 +166,7 @@ describe('Auth e isolamento de tenant (e2e)', () => {
     const rotatedReuse = await request(app.getHttpServer())
       .post('/api/v1/auth/refresh')
       .send({ refreshToken: rotated.refreshToken });
-    expect(rotatedReuse.status).toBe(401);
+    expect(rotatedReuse.status).toBe(200);
     expect(firstTokens.refreshToken).toBeDefined();
   });
 
