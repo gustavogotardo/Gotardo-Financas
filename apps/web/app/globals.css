@@ -259,6 +259,14 @@ a:hover {
   margin-bottom: 0.75rem;
 }
 
+.subcategory-row {
+  padding-left: 2.25rem !important;
+}
+
+.table td .btn + .btn {
+  margin-left: 0.4rem;
+}
+
 .section-head h2 {
   margin: 0;
 }

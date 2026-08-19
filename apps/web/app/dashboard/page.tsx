@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import {
@@ -71,6 +71,7 @@ export default function DashboardPage() {
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -163,7 +164,69 @@ export default function DashboardPage() {
     }
   }
 
+  async function deleteCategory(id: string, name: string) {
+    if (!window.confirm(`Excluir a categoria "${name}"?`)) return;
+    setDeletingId(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/v1/categories/${id}`, { method: 'DELETE' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao excluir a categoria.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function deleteAccount(id: string, name: string) {
+    if (!window.confirm(`Excluir a conta "${name}"?`)) return;
+    setDeletingId(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/v1/accounts/${id}`, { method: 'DELETE' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao excluir a conta.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function cancelTransaction(id: string, description: string) {
+    if (!window.confirm(`Cancelar a transação "${description}"?`)) return;
+    setDeletingId(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/v1/transactions/${id}`, { method: 'DELETE' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao cancelar a transação.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const canManage = user.role === 'OWNER' || user.role === 'ADMIN';
+
+  const groupedCategories = useMemo(() => {
+    const parents = (data?.categories ?? [])
+      .filter((category) => !category.parentId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const childrenByParent = new Map<string, CategoryRecord[]>();
+    for (const category of data?.categories ?? []) {
+      if (!category.parentId) continue;
+      const list = childrenByParent.get(category.parentId);
+      if (list) list.push(category);
+      else childrenByParent.set(category.parentId, [category]);
+    }
+    for (const list of childrenByParent.values()) {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    const orphanChildren = (data?.categories ?? []).filter(
+      (category) => category.parentId && !childrenByParent.has(category.parentId),
+    );
+    return { parents, childrenByParent, orphanChildren };
+  }, [data]);
 
   return (
     <div>
@@ -269,6 +332,7 @@ export default function DashboardPage() {
                         <th>Tipo</th>
                         <th>Instituição</th>
                         <th className="td-num">Saldo</th>
+                        {canManage ? <th>Ações</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -278,6 +342,18 @@ export default function DashboardPage() {
                           <td>{accountTypeLabel(account.type)}</td>
                           <td className="muted">{account.institution ?? '—'}</td>
                           <td className="td-num">{brl(account.balance)}</td>
+                          {canManage ? (
+                            <td>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                disabled={deletingId === account.id}
+                                onClick={() => void deleteAccount(account.id, account.name)}
+                              >
+                                Excluir
+                              </Button>
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
@@ -318,16 +394,83 @@ export default function DashboardPage() {
                       <tr>
                         <th>Nome</th>
                         <th>Ícone</th>
+                        {canManage ? <th>Ações</th> : null}
                       </tr>
                     </thead>
                     <tbody>
-                      {data.categories.map((category) => (
-                        <tr key={category.id}>
-                          <td>
-                            {category.parentId ? <span className="muted">— </span> : null}
-                            {category.name}
+                      {groupedCategories.parents.map((parent) => {
+                        const children = groupedCategories.childrenByParent.get(parent.id) ?? [];
+                        const hasChildren = children.length > 0;
+                        return (
+                          <Fragment key={parent.id}>
+                            <tr>
+                              <td>{parent.name}</td>
+                              <td className="muted">{parent.icon ?? '—'}</td>
+                              {canManage ? (
+                                <td>
+                                  {hasChildren ? (
+                                    <span
+                                      className="muted"
+                                      title="Exclua as subcategorias primeiro"
+                                    >
+                                      —
+                                    </span>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      disabled={deletingId === parent.id}
+                                      onClick={() => void deleteCategory(parent.id, parent.name)}
+                                    >
+                                      Excluir
+                                    </Button>
+                                  )}
+                                </td>
+                              ) : null}
+                            </tr>
+                            {children.map((child) => (
+                              <tr key={child.id}>
+                                <td className="subcategory-row">
+                                  <span className="muted">— </span>
+                                  {child.name}
+                                </td>
+                                <td className="muted">{child.icon ?? '—'}</td>
+                                {canManage ? (
+                                  <td>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      disabled={deletingId === child.id}
+                                      onClick={() => void deleteCategory(child.id, child.name)}
+                                    >
+                                      Excluir
+                                    </Button>
+                                  </td>
+                                ) : null}
+                              </tr>
+                            ))}
+                          </Fragment>
+                        );
+                      })}
+                      {groupedCategories.orphanChildren.map((child) => (
+                        <tr key={child.id}>
+                          <td className="subcategory-row">
+                            <span className="muted">— </span>
+                            {child.name}
                           </td>
-                          <td className="muted">{category.icon ?? '—'}</td>
+                          <td className="muted">{child.icon ?? '—'}</td>
+                          {canManage ? (
+                            <td>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                disabled={deletingId === child.id}
+                                onClick={() => void deleteCategory(child.id, child.name)}
+                              >
+                                Excluir
+                              </Button>
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
@@ -401,14 +544,24 @@ export default function DashboardPage() {
                               </td>
                               <td>
                                 {canManage && tx.status === 'PENDING' ? (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    disabled={confirmingId === tx.id}
-                                    onClick={() => void confirmTransaction(tx.id)}
-                                  >
-                                    {confirmingId === tx.id ? 'Confirmando…' : 'Confirmar'}
-                                  </Button>
+                                  <>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      disabled={confirmingId === tx.id || deletingId === tx.id}
+                                      onClick={() => void confirmTransaction(tx.id)}
+                                    >
+                                      {confirmingId === tx.id ? 'Confirmando…' : 'Confirmar'}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      disabled={confirmingId === tx.id || deletingId === tx.id}
+                                      onClick={() => void cancelTransaction(tx.id, tx.description)}
+                                    >
+                                      {deletingId === tx.id ? 'Cancelando…' : 'Cancelar'}
+                                    </Button>
+                                  </>
                                 ) : null}
                               </td>
                             </tr>

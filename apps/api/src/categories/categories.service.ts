@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Prisma } from '@gotardo/db';
+import { Prisma } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import type { AuthUser } from '../common/auth-user';
 import type { CreateCategoryDto } from './dto/create-category.dto';
@@ -68,7 +68,14 @@ export class CategoriesService {
     if (childrenCount > 0) {
       throw new ConflictException('Mova ou exclua as subcategorias primeiro');
     }
-    await this.prisma.category.delete({ where: { id } });
+    try {
+      await this.prisma.category.delete({ where: { id } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new ConflictException('Mova as transações desta categoria primeiro');
+      }
+      throw error;
+    }
   }
 
   private async ensureParentInFamily(user: AuthUser, parentId?: string | null): Promise<void> {
