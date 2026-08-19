@@ -89,11 +89,13 @@ Sequência até o alfa (após E0.5/E0.6):
   rotação atômica no refresh e aceite de convite em transação.
 - **E0.8 — Contas e categorias**: CRUD de contas e categorias hierárquicas com
   isolamento por família; OWNER/ADMIN gerenciam, MEMBER/VIEWER leem. Proteção de
-  ciclos na hierarquia e de exclusão com subcategorias.
+  ciclos na hierarquia e de exclusão com subcategorias. Coberta no dashboard:
+  seção Contas com "+ Nova conta" e seção Categorias com "+ Nova categoria".
 - **E0.9 — Transações**: CRUD manual vinculado a conta/categoria (envelope aceito
   quando existir), saldo da conta atualizado automaticamente ao confirmar
   (PENDING → CONFIRMED reverte/ajusta), fluxo de revisão por status. TRANSFER não
-  altera saldo até a modelagem de conta destino.
+  altera saldo até a modelagem de conta destino. Coberta no dashboard: formulário
+  de nova transação e botão "Confirmar" em transações pendentes.
 - **E0.10 — Envelopes**: CRUD de envelopes (meta `targetAmount`), alocações
   (funding) e resumo por envelope `alocado − gasto` (EXPENSE confirmado);
   exclusão bloqueada com transações vinculadas.
@@ -105,7 +107,8 @@ Sequência até o alfa (após E0.5/E0.6):
   logs, migrações via `prisma migrate deploy`. Conclusão do marco **ALFA**. ✅
 - **E0.13 — Front-end alfa (auth + dashboard)**: login/registro, sessão com
   refresh automático, dashboard com saldo total, receitas/despesas/resultado do
-  mês, contas e últimas transações.
+  mês, contas, categorias e transações — com criação de conta, categoria e
+  transação, confirmação de pendentes e navegação por mês.
 
 ### E1.1 — Dashboard por forma de pagamento (PRÓXIMA)
 
