@@ -100,8 +100,14 @@ Sequência até o alfa (após E0.5/E0.6):
 - **E0.11 — Relatórios**: fluxo de caixa (entradas vs. saídas por período e por
   mês), gastos por categoria e por envelope, extrato por conta com saldo de
   abertura/fechamento. Apenas leitura; qualquer membro consulta.
+- **E0.12 — Deploy de produção (on-prem)**: `compose.prod.yaml` (postgres, redis,
+  minio, api, web, ml), HTTPS via Caddy, backups `pg_dump` → MinIO com rotação de
+  logs, migrações via `prisma migrate deploy`. Conclusão do marco **ALFA**. ✅
+- **E0.13 — Front-end alfa (auth + dashboard)**: login/registro, sessão com
+  refresh automático, dashboard com saldo total, receitas/despesas/resultado do
+  mês, contas e últimas transações.
 
-### E0.12 — Deploy de produção (on-prem) (PRÓXIMA)
+### E1.1 — Dashboard por forma de pagamento (PRÓXIMA)
 
 ### E0.5/E0.6 — Autenticação e isolamento por tenant
 
@@ -171,6 +177,40 @@ campos já presentes em `User` (passwordHash, role, familyId).
 - HTTPS (Caddy), backups automatizados (pg_dump + MinIO), rotacionamento de logs.
 - Migração de schema via `prisma migrate deploy` no start da API.
 - Conclusão do marco **ALFA**. ✅
+
+### E1.1 — Dashboard por forma de pagamento (PRÓXIMA)
+
+Objetivo: dividir o dashboard em **seções por forma de pagamento** — transferência,
+boletos, PIX, cartão de crédito, cartão de débito, dinheiro — cada uma com
+subtotal e lista das transações do período. Hoje `paymentMethod` é string livre;
+passa a ser um enum padronizado.
+
+Escopo:
+
+- Novo enum `PaymentMethod` no schema Prisma (`PIX`, `BOLETO`, `CREDIT_CARD`,
+  `DEBIT_CARD`, `TRANSFER`, `CASH`, `OTHER`), espelhado em `packages/shared`.
+- `Transaction.paymentMethod` muda de `String?` para o enum; migration com
+  **backfill** dos valores já cadastrados (ex.: "pix"→PIX, "boleto"→BOLETO,
+  "cartão de crédito"→CREDIT_CARD, "transferência"→TRANSFER).
+- Validação por enum nos DTOs de criação/edição de transação.
+- Novo endpoint de agregação por forma de pagamento e período (totais por método,
+  incluindo transações **sem método**), com isolamento por tenant.
+- Dashboard: seções por forma de pagamento com subtotal do período, lista das
+  transações de cada forma, seletor de período e navegação para o extrato completo.
+
+Tarefas:
+
+1. Schema: enum `PaymentMethod` + alteração do campo + migration de backfill.
+2. `packages/shared`: `PaymentMethod` no enum compartilhado.
+3. API: validação de enum nos DTOs; endpoint de agregação por método e período.
+4. Web: dashboard com seções por forma de pagamento (subtotais, lista, período).
+
+Critérios de aceite:
+
+- Transação só aceita métodos do enum; dados legados migrados corretamente.
+- Dashboard agrupa por forma de pagamento e mostra subtotais do período;
+  transações sem método aparecem em "Outros / sem método".
+- O endpoint de agregação respeita o isolamento por tenant (teste de cruzamento).
 
 ### Serviços ML (P1) — `services/ml`
 

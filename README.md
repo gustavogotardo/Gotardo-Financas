@@ -136,8 +136,9 @@ make prod-backup            # backup manual (pg_dump → MinIO, diário automát
 - Migrações aplicadas no start da API (`prisma migrate deploy`).
 - Logs com rotação (`10m` × 3 por serviço).
 
-Backlog pós-ALFA: filas BullMQ (importação/OCR/ML), OCR de comprovantes e
-serviços de ML (categorização/anomalias).
+Backlog pós-ALFA: dashboard por forma de pagamento (E1.1), filas BullMQ
+(importação/OCR/ML), OCR de comprovantes e serviços de ML
+(categorização/anomalias).
 
 ## Decisões de produto
 
