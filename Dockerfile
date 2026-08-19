@@ -13,10 +13,10 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_API_URL=
 WORKDIR /app
 COPY . .
 RUN pnpm build
-ENV NEXT_PUBLIC_API_URL=
 
 FROM node:22-alpine AS runtime
 RUN apk add --no-cache openssl
