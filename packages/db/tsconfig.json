@@ -6,8 +6,9 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2022"
   },
   "include": ["src/**/*.ts"]
 }

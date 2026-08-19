@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import type { ApiEnvelope } from '@gotardo/shared';
+import { Public } from '../common/decorators/public.decorator';
 
 type HealthResponse = {
   status: 'ok';
@@ -10,6 +11,7 @@ type HealthResponse = {
 
 @Controller('health')
 export class HealthController {
+  @Public()
   @Get()
   check(): ApiEnvelope<HealthResponse> {
     return {

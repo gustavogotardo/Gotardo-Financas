@@ -59,6 +59,9 @@ pnpm --filter @gotardo/db db:migrate   # nova migration de desenvolvimento
 pnpm --filter @gotardo/db db:deploy    # aplica migrations (prod)
 pnpm --filter @gotardo/db db:studio    # Prisma Studio
 
+# testes de integração da API (exige infra + banco gotardo_test)
+make test-db-setup   # cria o banco de teste e aplica migrations
+
 # validações Python
 make py-test
 make py-lint
@@ -92,7 +95,14 @@ Fase E0.4 (schema Prisma) concluída: pacote `packages/db` com o schema do domí
 alocações, transações, documentos e regras recorrentes), enums espelhando
 `packages/shared`, migration inicial aplicada no PostgreSQL e client gerado.
 
-Próximas etapas do backlog: E0.5/E0.6 (autenticação e isolamento por tenant).
+Fase E0.5/E0.6 (autenticação e isolamento por tenant) concluída: registro com
+criação automática da família (OWNER), login, sessão com JWT + refresh token com
+rotação e revogação, guard global (rotas públicas marcadas com `@Public`), rate
+limit em auth, convites por token, troca de papéis, e primeiro módulo de domínio
+isolado (contas). Testes e2e cobrem o cruzamento de tenants (retorna 404).
+
+Próximas etapas do backlog: E0.8 (CRUD de contas/categorias com isolamento),
+E0.9 (transações), até o marco ALFA (E0.12, deploy on-prem).
 
 ## Decisões de produto
 

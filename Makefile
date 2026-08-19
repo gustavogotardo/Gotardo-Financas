@@ -2,7 +2,7 @@ PY := uv run
 PATH := $(HOME)/.local/bin:$(PATH)
 export PATH
 
-.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart
+.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart test-db-setup
 
 help:
 	@echo "Gotardo Finanças — monorepo"
@@ -28,6 +28,9 @@ help:
 	@echo "  infra-down    para a infraestrutura (mantém os volumes)"
 	@echo "  infra-down-volumes  para e apaga os dados (postgres, redis, minio)"
 	@echo "  infra-restart reinicia a infraestrutura"
+	@echo ""
+	@echo "Testes de integração (API):"
+	@echo "  test-db-setup cria o banco gotardo_test e aplica migrations"
 
 install:
 	pnpm install
@@ -83,3 +86,9 @@ infra-down-volumes:
 
 infra-restart:
 	$(COMPOSE) restart
+
+TEST_DATABASE_URL ?= postgresql://gotardo:gotardo@localhost:5432/gotardo_test?schema=public
+
+test-db-setup:
+	docker exec gotardo-dev-postgres-1 psql -U gotardo -d gotardo -tc "SELECT 1 FROM pg_database WHERE datname='gotardo_test'" | grep -q 1 || docker exec gotardo-dev-postgres-1 createdb -U gotardo gotardo_test
+	cd packages/db && DATABASE_URL="$(TEST_DATABASE_URL)" pnpm exec prisma migrate deploy

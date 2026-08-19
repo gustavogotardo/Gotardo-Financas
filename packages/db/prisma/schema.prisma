@@ -73,22 +73,55 @@ model Family {
   transactions   Transaction[]
   documents      Document[]
   recurringRules RecurringRule[]
+  invitations    Invitation[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  name         String
-  passwordHash String
-  role         FamilyRole @default(MEMBER)
-  familyId     String
-  family       Family     @relation(fields: [familyId], references: [id])
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  passwordHash  String
+  role          FamilyRole     @default(MEMBER)
+  familyId      String
+  family        Family         @relation(fields: [familyId], references: [id])
+  refreshTokens RefreshToken[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@index([familyId])
+}
+
+model RefreshToken {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?        @unique
+  replacedBy   RefreshToken?  @relation("TokenRotation", fields: [replacedById], references: [id])
+  replacedFrom RefreshToken[] @relation("TokenRotation")
+  createdAt    DateTime       @default(now())
+
+  @@index([userId])
+}
+
+model Invitation {
+  id         String     @id @default(cuid())
+  familyId   String
+  family     Family     @relation(fields: [familyId], references: [id])
+  email      String
+  role       FamilyRole @default(MEMBER)
+  token      String     @unique
+  createdBy  String
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([familyId])
+  @@index([email])
 }
 
 // --- Contas e categorias ---
