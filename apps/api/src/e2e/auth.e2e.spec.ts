@@ -12,6 +12,7 @@ import { AccountsModule } from '../accounts/accounts.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { EnvelopesModule } from '../envelopes/envelopes.module';
+import { ReportsModule } from '../reports/reports.module';
 import { HealthModule } from '../health/health.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -60,6 +61,7 @@ describe('Auth e isolamento de tenant (e2e)', () => {
         CategoriesModule,
         TransactionsModule,
         EnvelopesModule,
+        ReportsModule,
         HealthModule,
       ],
       providers: [
@@ -838,5 +840,285 @@ describe('Auth e isolamento de tenant (e2e)', () => {
       .set('Authorization', `Bearer ${tokensMember.accessToken}`)
       .send({ amount: 10 });
     expect(memberAllocate.status).toBe(403);
+  });
+
+  it('relatórios: fluxo de caixa, gastos por categoria e por envelope', async () => {
+    const email = emailFor('rep-a');
+    const reg = await register('Rep A', email, `Família Rep A ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    createdFamilies.push((meRes.body as MeResponse).familyId);
+
+    const acc = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Conta Rep' });
+    const accountId = (acc.body as { id: string }).id;
+
+    const catA = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Moradia' });
+    const catAId = (catA.body as { id: string }).id;
+    const catB = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Lazer' });
+    const catBId = (catB.body as { id: string }).id;
+
+    const envelope = await request(app.getHttpServer())
+      .post('/api/v1/envelopes')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Envelope Rep' });
+    const envelopeId = (envelope.body as { id: string }).id;
+
+    const createTx = (body: object) =>
+      request(app.getHttpServer())
+        .post('/api/v1/transactions')
+        .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .send(body);
+
+    await createTx({
+      accountId,
+      description: 'Salário',
+      amount: 1000,
+      type: 'INCOME',
+      status: 'CONFIRMED',
+      date: '2026-08-10T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Aluguel',
+      amount: 300,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-08-15T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      categoryId: catAId,
+      description: 'Conta de luz',
+      amount: 100,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-07-05T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Pendente',
+      amount: 500,
+      type: 'INCOME',
+      status: 'PENDING',
+      date: '2026-08-20T00:00:00.000Z',
+    });
+
+    const cashflow = await request(app.getHttpServer())
+      .get('/api/v1/reports/cashflow')
+      .query({ from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T23:59:59.000Z' })
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(cashflow.status).toBe(200);
+    const cashflowBody = cashflow.body as {
+      income: string;
+      expense: string;
+      net: string;
+      byMonth: { month: string; income: string; expense: string; net: string }[];
+    };
+    expect(cashflowBody.income).toBe('1000');
+    expect(cashflowBody.expense).toBe('300');
+    expect(cashflowBody.net).toBe('700');
+    expect(cashflowBody.byMonth).toHaveLength(1);
+    expect(cashflowBody.byMonth[0]!.month).toBe('2026-08');
+    expect(cashflowBody.byMonth[0]!.income).toBe('1000');
+    expect(cashflowBody.byMonth[0]!.expense).toBe('300');
+
+    await createTx({
+      accountId,
+      categoryId: catAId,
+      description: 'Mercado',
+      amount: 100,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-08-01T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      categoryId: catBId,
+      description: 'Cinema',
+      amount: 50,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-08-02T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Sem categoria',
+      amount: 25,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-08-03T00:00:00.000Z',
+    });
+
+    const byCategory = await request(app.getHttpServer())
+      .get('/api/v1/reports/expenses-by-category')
+      .query({ from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T23:59:59.000Z' })
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(byCategory.status).toBe(200);
+    const catRows = byCategory.body as {
+      categoryId: string | null;
+      categoryName: string;
+      total: string;
+    }[];
+    expect(catRows).toHaveLength(3);
+    expect(catRows[0]!.categoryName).toBe('Sem categoria');
+    expect(catRows[0]!.total).toBe('325');
+    expect(catRows[1]!.categoryName).toBe('Moradia');
+    expect(catRows[1]!.total).toBe('100');
+    expect(catRows[2]!.categoryName).toBe('Lazer');
+    expect(catRows[2]!.total).toBe('50');
+
+    await createTx({
+      accountId,
+      envelopeId,
+      description: 'Farmácia',
+      amount: 80,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-08-04T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Sem envelope',
+      amount: 20,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-08-05T00:00:00.000Z',
+    });
+
+    const byEnvelope = await request(app.getHttpServer())
+      .get('/api/v1/reports/expenses-by-envelope')
+      .query({ from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T23:59:59.000Z' })
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(byEnvelope.status).toBe(200);
+    const envRows = byEnvelope.body as {
+      envelopeId: string | null;
+      envelopeName: string;
+      total: string;
+    }[];
+    expect(envRows).toHaveLength(2);
+    expect(envRows[0]!.envelopeName).toBe('Sem envelope');
+    expect(envRows[0]!.total).toBe('495');
+    expect(envRows[1]!.envelopeName).toBe('Envelope Rep');
+    expect(envRows[1]!.total).toBe('80');
+  });
+
+  it('relatórios: extrato por conta e isolamento', async () => {
+    const emailA = emailFor('rst-a');
+    const regA = await register('Rst A', emailA, `Família Rst A ${suffix}`);
+    const tokensA = regA.body as TokensResponse;
+    const meA = await me(tokensA.accessToken);
+    createdFamilies.push((meA.body as MeResponse).familyId);
+
+    const acc = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ name: 'Conta Rst' });
+    const accountId = (acc.body as { id: string }).id;
+
+    const createTx = (body: object) =>
+      request(app.getHttpServer())
+        .post('/api/v1/transactions')
+        .set('Authorization', `Bearer ${tokensA.accessToken}`)
+        .send(body);
+
+    await createTx({
+      accountId,
+      description: 'Entrada anterior',
+      amount: 400,
+      type: 'INCOME',
+      status: 'CONFIRMED',
+      date: '2026-07-15T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Salário',
+      amount: 300,
+      type: 'INCOME',
+      status: 'CONFIRMED',
+      date: '2026-08-10T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Mercado',
+      amount: 100,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-08-15T00:00:00.000Z',
+    });
+
+    const stmt = await request(app.getHttpServer())
+      .get(`/api/v1/reports/account-statement/${accountId}`)
+      .query({ from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T23:59:59.000Z' })
+      .set('Authorization', `Bearer ${tokensA.accessToken}`);
+    expect(stmt.status).toBe(200);
+    const stmtBody = stmt.body as {
+      openingBalance: string;
+      closingBalance: string;
+      income: string;
+      expense: string;
+      transactions: { id: string }[];
+    };
+    expect(stmtBody.openingBalance).toBe('400');
+    expect(stmtBody.income).toBe('300');
+    expect(stmtBody.expense).toBe('100');
+    expect(stmtBody.closingBalance).toBe('600');
+    expect(stmtBody.transactions).toHaveLength(2);
+
+    const stmtAll = await request(app.getHttpServer())
+      .get(`/api/v1/reports/account-statement/${accountId}`)
+      .set('Authorization', `Bearer ${tokensA.accessToken}`);
+    expect(stmtAll.status).toBe(200);
+    const stmtAllBody = stmtAll.body as {
+      openingBalance: string;
+      closingBalance: string;
+      transactions: { id: string }[];
+    };
+    expect(stmtAllBody.openingBalance).toBe('0');
+    expect(stmtAllBody.closingBalance).toBe('600');
+    expect(stmtAllBody.transactions).toHaveLength(3);
+
+    const emailB = emailFor('rst-b');
+    const regB = await register('Rst B', emailB, `Família Rst B ${suffix}`);
+    const tokensB = regB.body as TokensResponse;
+    const meB = await me(tokensB.accessToken);
+    createdFamilies.push((meB.body as MeResponse).familyId);
+
+    const foreignStmt = await request(app.getHttpServer())
+      .get(`/api/v1/reports/account-statement/${accountId}`)
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(foreignStmt.status).toBe(404);
+
+    const cashflowB = await request(app.getHttpServer())
+      .get('/api/v1/reports/cashflow')
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(cashflowB.status).toBe(200);
+    expect((cashflowB.body as { income: string }).income).toBe('0');
+
+    const memberInvite = await request(app.getHttpServer())
+      .post('/api/v1/family/invitations')
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ email: emailFor('rst-member') });
+    const memberAccept = await request(app.getHttpServer())
+      .post('/api/v1/auth/accept-invitation')
+      .send({
+        token: (memberInvite.body as { inviteToken: string }).inviteToken,
+        name: 'Rst Member',
+        password: 'senha-segura-123',
+      });
+    const tokensMember = memberAccept.body as TokensResponse;
+
+    const memberCashflow = await request(app.getHttpServer())
+      .get('/api/v1/reports/cashflow')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`);
+    expect(memberCashflow.status).toBe(200);
   });
 });

@@ -97,8 +97,11 @@ Sequência até o alfa (após E0.5/E0.6):
 - **E0.10 — Envelopes**: CRUD de envelopes (meta `targetAmount`), alocações
   (funding) e resumo por envelope `alocado − gasto` (EXPENSE confirmado);
   exclusão bloqueada com transações vinculadas.
+- **E0.11 — Relatórios**: fluxo de caixa (entradas vs. saídas por período e por
+  mês), gastos por categoria e por envelope, extrato por conta com saldo de
+  abertura/fechamento. Apenas leitura; qualquer membro consulta.
 
-### E0.11 — Relatórios básicos (PRÓXIMA)
+### E0.12 — Deploy de produção (on-prem) (PRÓXIMA)
 
 ### E0.5/E0.6 — Autenticação e isolamento por tenant
 
