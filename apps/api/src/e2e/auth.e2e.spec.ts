@@ -10,6 +10,7 @@ import { AuthModule } from '../auth/auth.module';
 import { FamilyModule } from '../family/family.module';
 import { AccountsModule } from '../accounts/accounts.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { TransactionsModule } from '../transactions/transactions.module';
 import { HealthModule } from '../health/health.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -56,6 +57,7 @@ describe('Auth e isolamento de tenant (e2e)', () => {
         FamilyModule,
         AccountsModule,
         CategoriesModule,
+        TransactionsModule,
         HealthModule,
       ],
       providers: [
@@ -75,6 +77,7 @@ describe('Auth e isolamento de tenant (e2e)', () => {
 
   afterAll(async () => {
     if (createdFamilies.length > 0) {
+      await prisma.transaction.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.category.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.invitation.deleteMany({ where: { familyId: { in: createdFamilies } } });
@@ -475,5 +478,185 @@ describe('Auth e isolamento de tenant (e2e)', () => {
       .set('Authorization', `Bearer ${tokensMember.accessToken}`)
       .send({ name: 'Invadida' });
     expect(memberPatchCategory.status).toBe(403);
+  });
+
+  it('transações: saldo da conta acompanha confirmação, edição e exclusão', async () => {
+    const email = emailFor('tx-a');
+    const reg = await register('Tx A', email, `Família Tx A ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    createdFamilies.push((meRes.body as MeResponse).familyId);
+
+    const createAccount = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Conta Tx' });
+    expect(createAccount.status).toBe(201);
+    const accountId = (createAccount.body as { id: string }).id;
+
+    const createCategory = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Alimentação Tx' });
+    expect(createCategory.status).toBe(201);
+    const categoryId = (createCategory.body as { id: string }).id;
+
+    const getBalance = async (): Promise<string> => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/accounts/${accountId}`)
+        .set('Authorization', `Bearer ${tokens.accessToken}`);
+      return (res.body as { balance: string }).balance;
+    };
+
+    expect(await getBalance()).toBe('0');
+
+    const createExpense = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({
+        accountId,
+        categoryId,
+        description: 'Mercado',
+        amount: 50,
+        type: 'EXPENSE',
+        status: 'CONFIRMED',
+        date: '2026-08-01T00:00:00.000Z',
+      });
+    expect(createExpense.status).toBe(201);
+    const expenseId = (createExpense.body as { id: string }).id;
+    expect((createExpense.body as { category: { id: string } | null }).category?.id).toBe(
+      categoryId,
+    );
+    expect(await getBalance()).toBe('-50');
+
+    const createPending = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ accountId, description: 'Salário', amount: 200, type: 'INCOME' });
+    expect(createPending.status).toBe(201);
+    const incomeId = (createPending.body as { id: string }).id;
+    expect((createPending.body as { status: string }).status).toBe('PENDING');
+    expect(await getBalance()).toBe('-50');
+
+    const confirm = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${incomeId}`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ status: 'CONFIRMED' });
+    expect(confirm.status).toBe(200);
+    expect(await getBalance()).toBe('150');
+
+    const editAmount = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${incomeId}`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ amount: 100 });
+    expect(editAmount.status).toBe(200);
+    expect(await getBalance()).toBe('50');
+
+    const remove = await request(app.getHttpServer())
+      .delete(`/api/v1/transactions/${expenseId}`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(remove.status).toBe(204);
+    expect(await getBalance()).toBe('100');
+
+    const list = await request(app.getHttpServer())
+      .get('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body as { id: string }[]).toHaveLength(1);
+  });
+
+  it('transações: isolamento entre tenants', async () => {
+    const emailA = emailFor('txi-a');
+    const regA = await register('Txi A', emailA, `Família Txi A ${suffix}`);
+    const tokensA = regA.body as TokensResponse;
+    const meA = await me(tokensA.accessToken);
+    createdFamilies.push((meA.body as MeResponse).familyId);
+
+    const accA = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ name: 'Conta Txi A' });
+    expect(accA.status).toBe(201);
+    const accountA = (accA.body as { id: string }).id;
+
+    const tx = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({
+        accountId: accountA,
+        description: 'Padaria',
+        amount: 10,
+        type: 'EXPENSE',
+        status: 'CONFIRMED',
+      });
+    expect(tx.status).toBe(201);
+    const txId = (tx.body as { id: string }).id;
+
+    const emailB = emailFor('txi-b');
+    const regB = await register('Txi B', emailB, `Família Txi B ${suffix}`);
+    const tokensB = regB.body as TokensResponse;
+    const meB = await me(tokensB.accessToken);
+    createdFamilies.push((meB.body as MeResponse).familyId);
+
+    const listB = await request(app.getHttpServer())
+      .get('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(listB.status).toBe(200);
+    expect(listB.body).toHaveLength(0);
+
+    const getB = await request(app.getHttpServer())
+      .get(`/api/v1/transactions/${txId}`)
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(getB.status).toBe(404);
+
+    const createWithForeignAccount = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokensB.accessToken}`)
+      .send({ accountId: accountA, description: 'Invasão', amount: 1, type: 'EXPENSE' });
+    expect(createWithForeignAccount.status).toBe(404);
+
+    const patchB = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${txId}`)
+      .set('Authorization', `Bearer ${tokensB.accessToken}`)
+      .send({ description: 'Invasão' });
+    expect(patchB.status).toBe(404);
+  });
+
+  it('MEMBER lê transações mas não cria', async () => {
+    const emailOwner = emailFor('tpm-owner');
+    const regOwner = await register('Tpm Owner', emailOwner, `Família Tpm ${suffix}`);
+    const tokensOwner = regOwner.body as TokensResponse;
+    const meOwner = await me(tokensOwner.accessToken);
+    createdFamilies.push((meOwner.body as MeResponse).familyId);
+
+    const acc = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ name: 'Conta Tpm' });
+    const accountId = (acc.body as { id: string }).id;
+
+    const invite = await request(app.getHttpServer())
+      .post('/api/v1/family/invitations')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ email: emailFor('tpm-member') });
+    const accept = await request(app.getHttpServer())
+      .post('/api/v1/auth/accept-invitation')
+      .send({
+        token: (invite.body as { inviteToken: string }).inviteToken,
+        name: 'Tpm Member',
+        password: 'senha-segura-123',
+      });
+    const tokensMember = accept.body as TokensResponse;
+
+    const memberList = await request(app.getHttpServer())
+      .get('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`);
+    expect(memberList.status).toBe(200);
+
+    const memberCreate = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`)
+      .send({ accountId, description: 'Invasão', amount: 1, type: 'EXPENSE' });
+    expect(memberCreate.status).toBe(403);
   });
 });

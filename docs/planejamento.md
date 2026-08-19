@@ -90,6 +90,12 @@ Sequência até o alfa (após E0.5/E0.6):
 - **E0.8 — Contas e categorias**: CRUD de contas e categorias hierárquicas com
   isolamento por família; OWNER/ADMIN gerenciam, MEMBER/VIEWER leem. Proteção de
   ciclos na hierarquia e de exclusão com subcategorias.
+- **E0.9 — Transações**: CRUD manual vinculado a conta/categoria (envelope aceito
+  quando existir), saldo da conta atualizado automaticamente ao confirmar
+  (PENDING → CONFIRMED reverte/ajusta), fluxo de revisão por status. TRANSFER não
+  altera saldo até a modelagem de conta destino.
+
+### E0.10 — Orçamento por envelopes (PRÓXIMA)
 
 ### E0.5/E0.6 — Autenticação e isolamento por tenant
 
@@ -136,7 +142,7 @@ campos já presentes em `User` (passwordHash, role, familyId).
 - Categorias hierárquicas (subcategoria via `parentId`).
 - Restrições por papel (OWNER/ADMIN gerenciam; MEMBER/VIEWER leem).
 
-### E0.9 — Transações (PRÓXIMA)
+### E0.9 — Transações
 
 - CRUD de `Transaction` (manual), vínculo com conta, categoria e envelope.
 - Atualização do saldo da conta ao confirmar transação.

@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { FamilyModule } from './family/family.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { CategoriesModule } from './categories/categories.module';
+import { TransactionsModule } from './transactions/transactions.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -21,6 +22,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     FamilyModule,
     AccountsModule,
     CategoriesModule,
+    TransactionsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

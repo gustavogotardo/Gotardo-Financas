@@ -106,7 +106,12 @@ hierárquicas (subcategoria via `parentId`) com isolamento por família. Papéis
 OWNER/ADMIN gerenciam; MEMBER/VIEWER somente leem. Hierarquia protegida contra
 ciclos e exclusão de categoria com subcategorias.
 
-Próximas etapas do backlog: E0.9 (transações), E0.10 (envelopes), até o marco
+Fase E0.9 (transações) concluída: CRUD manual vinculado a conta/categoria, com
+saldo da conta atualizado automaticamente ao confirmar (PENDING → CONFIRMED,
+incluindo edição e exclusão que revertem/ajustam) e fluxo de revisão por status.
+Papéis: OWNER/ADMIN gerenciam; MEMBER/VIEWER leem.
+
+Próximas etapas do backlog: E0.10 (envelopes), E0.11 (relatórios), até o marco
 ALFA (E0.12, deploy on-prem).
 
 ## Decisões de produto
