@@ -47,12 +47,30 @@ export type TransactionRecord = {
   createdAt: string;
 };
 
+export type CategoryRecord = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  icon: string | null;
+};
+
 export type PaymentMethodRow = {
   method: string | null;
   label: string;
   income: string;
   expense: string;
   count: number;
+};
+
+export type CreateTransactionInput = {
+  description: string;
+  amount: number;
+  type: string;
+  status: string;
+  accountId: string;
+  categoryId?: string;
+  paymentMethod?: string;
+  date: string;
 };
 
 export class ApiError extends Error {

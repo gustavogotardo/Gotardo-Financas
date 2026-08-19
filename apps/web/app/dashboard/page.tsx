@@ -7,6 +7,7 @@ import {
   apiFetch,
   type AccountRecord,
   type CashflowResponse,
+  type CategoryRecord,
   type PaymentMethodRow,
   type TransactionRecord,
 } from '@/lib/api';
@@ -19,11 +20,13 @@ import {
   statusLabel,
 } from '@/lib/format';
 import { Badge, Button, Card, ErrorBox, Spinner, StatCard } from '@/components/ui';
+import { TransactionForm } from '@/components/transaction-form';
 
 const MONTH_FORMAT = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
 
 type DashboardData = {
   accounts: AccountRecord[];
+  categories: CategoryRecord[];
   cashflow: CashflowResponse;
   paymentMethods: PaymentMethodRow[];
   transactions: TransactionRecord[];
@@ -62,20 +65,22 @@ export default function DashboardPage() {
   const [month, setMonth] = useState(() => new Date());
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     const range = monthRange(month);
     try {
-      const [accounts, cashflow, paymentMethods, transactions] = await Promise.all([
+      const [accounts, categories, cashflow, paymentMethods, transactions] = await Promise.all([
         apiFetch<AccountRecord[]>('/api/v1/accounts'),
+        apiFetch<CategoryRecord[]>('/api/v1/categories'),
         apiFetch<CashflowResponse>(`/api/v1/reports/cashflow?from=${range.from}&to=${range.to}`),
         apiFetch<PaymentMethodRow[]>(
           `/api/v1/reports/payment-methods?from=${range.from}&to=${range.to}`,
         ),
         apiFetch<TransactionRecord[]>('/api/v1/transactions'),
       ]);
-      setData({ accounts, cashflow, paymentMethods, transactions });
+      setData({ accounts, categories, cashflow, paymentMethods, transactions });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar os dados.');
     }
@@ -171,8 +176,25 @@ export default function DashboardPage() {
             <Button type="button" variant="ghost" onClick={() => void load()}>
               Atualizar
             </Button>
+            {user.role === 'OWNER' || user.role === 'ADMIN' ? (
+              <Button type="button" onClick={() => setShowForm((show) => !show)}>
+                {showForm ? 'Fechar' : 'Nova transação'}
+              </Button>
+            ) : null}
           </div>
         </div>
+
+        {showForm && data ? (
+          <TransactionForm
+            accounts={data.accounts}
+            categories={data.categories}
+            onCancel={() => setShowForm(false)}
+            onCreated={async () => {
+              setShowForm(false);
+              await load();
+            }}
+          />
+        ) : null}
 
         {error ? <ErrorBox>{error}</ErrorBox> : null}
 

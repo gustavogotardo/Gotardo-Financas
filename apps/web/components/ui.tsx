@@ -1,4 +1,9 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+} from 'react';
 
 export function Button({
   children,
@@ -14,6 +19,14 @@ export function Button({
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`input ${className ?? ''}`} {...props} />;
+}
+
+export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select className={`input ${className ?? ''}`} {...props}>
+      {children}
+    </select>
+  );
 }
 
 export function Field({
