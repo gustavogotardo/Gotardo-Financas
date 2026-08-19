@@ -229,6 +229,14 @@ Critérios de aceite:
 - **PWA avançado** (offline, instalação) e ajustes de UX.
 - Refinamento de relatórios e painel da família.
 
+### Ambiente de teste (alfa on-prem)
+
+- **URL**: `http://<ip-do-servidor>/` (stack `compose.prod.yaml` / `make prod-up-local`).
+- **Usuário**: `alfa@example.com`
+- **Senha**: `SenhaForte123!`
+- Conta criada com papel `OWNER` e dados de demonstração (2 contas, categorias e
+  transações de agosto) para testar dashboard, relatórios e formulários.
+
 ## 5. Decisões de produto (registro)
 
 - **OCR adiado (P3)**: PDFs escaneados fora do MVP.
