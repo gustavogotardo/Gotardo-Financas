@@ -47,6 +47,10 @@ export class FamilyService {
     if (user.role !== FamilyRole.OWNER && user.role !== FamilyRole.ADMIN) {
       throw new ForbiddenException('Somente OWNER/ADMIN podem convidar');
     }
+    const role = dto.role ?? FamilyRole.MEMBER;
+    if (role === FamilyRole.OWNER && user.role !== FamilyRole.OWNER) {
+      throw new ForbiddenException('Somente o OWNER pode convidar como OWNER');
+    }
     const email = dto.email.toLowerCase();
     const existingMember = await this.prisma.user.findFirst({
       where: { email, familyId: user.familyId },
@@ -65,7 +69,7 @@ export class FamilyService {
       data: {
         familyId: user.familyId,
         email,
-        role: dto.role ?? FamilyRole.MEMBER,
+        role,
         token,
         createdBy: user.id,
         expiresAt: new Date(Date.now() + INVITATION_EXPIRY_MS),
@@ -111,6 +115,9 @@ export class FamilyService {
     }
     if (member.role === FamilyRole.OWNER && user.role !== FamilyRole.OWNER) {
       throw new ForbiddenException('Somente o OWNER altera outro OWNER');
+    }
+    if (dto.role === FamilyRole.OWNER && user.role !== FamilyRole.OWNER) {
+      throw new ForbiddenException('Somente o OWNER pode conceder o papel OWNER');
     }
     if (member.role === FamilyRole.OWNER && dto.role !== FamilyRole.OWNER) {
       const owners = await this.prisma.user.count({

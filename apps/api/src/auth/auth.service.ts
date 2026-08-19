@@ -2,7 +2,7 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
-import type { User } from '@gotardo/db';
+import { Prisma, type User } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import type { JwtPayload } from '../common/auth-user';
 import { parseDuration, randomToken, sha256 } from '../common/tokens';
@@ -42,16 +42,23 @@ export class AuthService {
       throw new ConflictException('Email já cadastrado');
     }
     const passwordHash = await argon2.hash(dto.password);
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        name: dto.name,
-        passwordHash,
-        role: 'OWNER',
-        family: { create: { name: dto.familyName } },
-      },
-    });
-    return this.issueTokens(user);
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          email,
+          name: dto.name,
+          passwordHash,
+          role: 'OWNER',
+          family: { create: { name: dto.familyName } },
+        },
+      });
+      return this.issueTokens(user);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Email já cadastrado');
+      }
+      throw error;
+    }
   }
 
   async login(dto: LoginDto): Promise<AuthTokens> {
@@ -80,10 +87,14 @@ export class AuthService {
       throw new UnauthorizedException('Token expirado');
     }
     const tokens = await this.issueTokens(stored.user);
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
+    const rotated = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null, replacedById: null },
       data: { revokedAt: new Date(), replacedById: tokens.refreshTokenId },
     });
+    if (rotated.count === 0) {
+      await this.revokeAllForUser(stored.userId);
+      throw new UnauthorizedException('Token reutilizado — sessão revogada');
+    }
     return tokens;
   }
 
@@ -128,20 +139,30 @@ export class AuthService {
       throw new ConflictException('Email já cadastrado');
     }
     const passwordHash = await argon2.hash(dto.password);
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        name: dto.name,
-        passwordHash,
-        role: invitation.role,
-        familyId: invitation.familyId,
-      },
-    });
-    await this.prisma.invitation.update({
-      where: { id: invitation.id },
-      data: { acceptedAt: new Date() },
-    });
-    return this.issueTokens(user);
+    try {
+      const user = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            email,
+            name: dto.name,
+            passwordHash,
+            role: invitation.role,
+            familyId: invitation.familyId,
+          },
+        });
+        await tx.invitation.update({
+          where: { id: invitation.id },
+          data: { acceptedAt: new Date() },
+        });
+        return created;
+      });
+      return this.issueTokens(user);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Email já cadastrado');
+      }
+      throw error;
+    }
   }
 
   private async issueTokens(user: User): Promise<IssuedTokens> {

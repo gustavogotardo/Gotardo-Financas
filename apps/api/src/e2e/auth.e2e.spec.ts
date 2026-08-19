@@ -243,4 +243,62 @@ describe('Auth e isolamento de tenant (e2e)', () => {
       .send({ role: 'ADMIN' });
     expect(ownerChangeRole.status).toBe(200);
   });
+
+  it('ADMIN não pode conceder OWNER nem convidar como OWNER', async () => {
+    const emailOwner = emailFor('esc-owner');
+    const regOwner = await register('Esc Owner', emailOwner, `Família Esc ${suffix}`);
+    const tokensOwner = regOwner.body as TokensResponse;
+    const meOwner = await me(tokensOwner.accessToken);
+    createdFamilies.push((meOwner.body as MeResponse).familyId);
+
+    const inviteAdmin = await request(app.getHttpServer())
+      .post('/api/v1/family/invitations')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ email: emailFor('esc-admin'), role: 'ADMIN' });
+    expect(inviteAdmin.status).toBe(201);
+    const acceptAdmin = await request(app.getHttpServer())
+      .post('/api/v1/auth/accept-invitation')
+      .send({
+        token: (inviteAdmin.body as { inviteToken: string }).inviteToken,
+        name: 'Esc Admin',
+        password: 'senha-segura-123',
+      });
+    const tokensAdmin = acceptAdmin.body as TokensResponse;
+    const meAdmin = await me(tokensAdmin.accessToken);
+    expect((meAdmin.body as MeResponse).role).toBe('ADMIN');
+
+    const inviteMember = await request(app.getHttpServer())
+      .post('/api/v1/family/invitations')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ email: emailFor('esc-member') });
+    expect(inviteMember.status).toBe(201);
+    const acceptMember = await request(app.getHttpServer())
+      .post('/api/v1/auth/accept-invitation')
+      .send({
+        token: (inviteMember.body as { inviteToken: string }).inviteToken,
+        name: 'Esc Member',
+        password: 'senha-segura-123',
+      });
+    const tokensMember = acceptMember.body as TokensResponse;
+    const meMember = await me(tokensMember.accessToken);
+    const memberId = (meMember.body as MeResponse).id;
+
+    const grantOwner = await request(app.getHttpServer())
+      .patch(`/api/v1/family/members/${memberId}/role`)
+      .set('Authorization', `Bearer ${tokensAdmin.accessToken}`)
+      .send({ role: 'OWNER' });
+    expect(grantOwner.status).toBe(403);
+
+    const inviteAsOwner = await request(app.getHttpServer())
+      .post('/api/v1/family/invitations')
+      .set('Authorization', `Bearer ${tokensAdmin.accessToken}`)
+      .send({ email: emailFor('esc-invited-owner'), role: 'OWNER' });
+    expect(inviteAsOwner.status).toBe(403);
+
+    const ownerGrants = await request(app.getHttpServer())
+      .patch(`/api/v1/family/members/${memberId}/role`)
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ role: 'OWNER' });
+    expect(ownerGrants.status).toBe(200);
+  });
 });
