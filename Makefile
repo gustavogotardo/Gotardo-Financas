@@ -2,7 +2,7 @@ PY := uv run
 PATH := $(HOME)/.local/bin:$(PATH)
 export PATH
 
-.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart test-db-setup prod-up prod-build prod-down prod-down-volumes prod-logs prod-ps prod-backup
+.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart test-db-setup prod-up prod-up-local prod-build prod-down prod-down-volumes prod-logs prod-ps prod-backup
 
 help:
 	@echo "Gotardo Finanças — monorepo"
@@ -34,6 +34,7 @@ help:
 	@echo ""
 	@echo "Produção on-prem (compose.prod.yaml — precisa de .env):"
 	@echo "  prod-up       sobe a stack completa em produção (build + up)"
+	@echo "  prod-up-local sobe a stack com TLS interno (teste sem DNS público)"
 	@echo "  prod-build    constrói as imagens de produção"
 	@echo "  prod-down     para a stack (mantém os volumes)"
 	@echo "  prod-down-volumes  para e apaga os dados de produção"
@@ -105,10 +106,24 @@ test-db-setup:
 PROD_COMPOSE := docker compose -f compose.prod.yaml
 
 prod-up:
-	$(PROD_COMPOSE) up -d --build
+	docker build -t gotardo-prod-api -f Dockerfile .
+	docker tag gotardo-prod-api gotardo-prod-web
+	docker build -t gotardo-prod-ml -f services/ml/Dockerfile services/ml
+	docker build -t gotardo-prod-backup -f deploy/backup/Dockerfile deploy/backup
+	$(PROD_COMPOSE) up -d --no-build
+
+prod-up-local:
+	docker build -t gotardo-prod-api -f Dockerfile .
+	docker tag gotardo-prod-api gotardo-prod-web
+	docker build -t gotardo-prod-ml -f services/ml/Dockerfile services/ml
+	docker build -t gotardo-prod-backup -f deploy/backup/Dockerfile deploy/backup
+	docker compose -f compose.prod.yaml -f compose.prod.local.yaml up -d --no-build
 
 prod-build:
-	$(PROD_COMPOSE) build
+	docker build -t gotardo-prod-api -f Dockerfile .
+	docker tag gotardo-prod-api gotardo-prod-web
+	docker build -t gotardo-prod-ml -f services/ml/Dockerfile services/ml
+	docker build -t gotardo-prod-backup -f deploy/backup/Dockerfile deploy/backup
 
 prod-down:
 	$(PROD_COMPOSE) down

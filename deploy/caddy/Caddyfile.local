@@ -1,0 +1,15 @@
+# Caddy local para teste da stack alfa sem DNS público (HTTP puro).
+# Certificado interno (tls internal) com IP falha no handshake — por isso HTTP.
+# Mesmo roteamento do Caddyfile de produção.
+
+http://{$DOMAIN} {
+	encode gzip
+
+	handle /api/v1/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy web:3001
+	}
+}

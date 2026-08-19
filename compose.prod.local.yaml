@@ -1,0 +1,14 @@
+name: gotardo-prod
+
+# Override local para teste da alfa sem DNS público: Caddy com TLS interno.
+# Uso: docker compose -f compose.prod.yaml -f compose.prod.local.yaml up -d --build
+# (target `make prod-up-local`)
+
+services:
+  caddy:
+    volumes:
+      - ./deploy/caddy/Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
