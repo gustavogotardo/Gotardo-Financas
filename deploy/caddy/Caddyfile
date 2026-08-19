@@ -1,0 +1,15 @@
+# Gotardo Finanças — proxy HTTPS (Caddy).
+# Certificados automáticos via Let's Encrypt para o domínio público em $DOMAIN.
+# Para uso apenas interno (sem DNS público), adicione `tls internal` no bloco do site.
+
+{$DOMAIN} {
+	encode gzip
+
+	handle /api/v1/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy web:3001
+	}
+}

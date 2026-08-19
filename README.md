@@ -119,7 +119,25 @@ Fase E0.11 (relatórios) concluída: fluxo de caixa (entradas vs. saídas por
 período e por mês), gastos por categoria e por envelope, e extrato por conta com
 saldo de abertura/fechamento. Somente leitura, disponível a qualquer membro.
 
-Próximas etapas do backlog: E0.12 (deploy on-prem) para concluir o marco ALFA.
+## Deploy on-prem (E0.12 — marco ALFA)
+
+Stack de produção via Docker Compose (`compose.prod.yaml`): postgres, redis,
+minio, api, web, ml e proxy HTTPS (Caddy) com backups automáticos de banco.
+
+```sh
+cp .env.example .env        # defina DOMAIN e segredos/senhas fortes
+make prod-up                # build + start da stack (após `make infra-down`)
+make prod-logs              # acompanhar os logs
+make prod-backup            # backup manual (pg_dump → MinIO, diário automático)
+```
+
+- HTTPS automático via Let's Encrypt para o domínio em `DOMAIN`; para rede
+  interna, adicione `tls internal` em `deploy/caddy/Caddyfile`.
+- Migrações aplicadas no start da API (`prisma migrate deploy`).
+- Logs com rotação (`10m` × 3 por serviço).
+
+Backlog pós-ALFA: filas BullMQ (importação/OCR/ML), OCR de comprovantes e
+serviços de ML (categorização/anomalias).
 
 ## Decisões de produto
 

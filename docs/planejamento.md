@@ -165,12 +165,12 @@ campos já presentes em `User` (passwordHash, role, familyId).
 - Gastos por categoria e por envelope.
 - Extrato por conta/período.
 
-### E0.12 — Deploy de produção (on-prem)
+### E0.12 — Deploy de produção (on-prem) ✅
 
-- Docker Compose de produção: postgres, redis, minio, api, web, ml.
-- HTTPS (Caddy/Traefik), backups automatizados (pg_dump + MinIO), rotacionamento de logs.
-- Migração de schema via `prisma migrate deploy`.
-- Conclusão do marco **ALFA**.
+- Docker Compose de produção (`compose.prod.yaml`): postgres, redis, minio, api, web, ml.
+- HTTPS (Caddy), backups automatizados (pg_dump + MinIO), rotacionamento de logs.
+- Migração de schema via `prisma migrate deploy` no start da API.
+- Conclusão do marco **ALFA**. ✅
 
 ### Serviços ML (P1) — `services/ml`
 

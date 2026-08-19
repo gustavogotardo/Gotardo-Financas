@@ -2,7 +2,7 @@ PY := uv run
 PATH := $(HOME)/.local/bin:$(PATH)
 export PATH
 
-.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart test-db-setup
+.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart test-db-setup prod-up prod-build prod-down prod-down-volumes prod-logs prod-ps prod-backup
 
 help:
 	@echo "Gotardo Finanças — monorepo"
@@ -31,6 +31,15 @@ help:
 	@echo ""
 	@echo "Testes de integração (API):"
 	@echo "  test-db-setup cria o banco gotardo_test e aplica migrations"
+	@echo ""
+	@echo "Produção on-prem (compose.prod.yaml — precisa de .env):"
+	@echo "  prod-up       sobe a stack completa em produção (build + up)"
+	@echo "  prod-build    constrói as imagens de produção"
+	@echo "  prod-down     para a stack (mantém os volumes)"
+	@echo "  prod-down-volumes  para e apaga os dados de produção"
+	@echo "  prod-logs     acompanha os logs da stack"
+	@echo "  prod-ps       status dos serviços de produção"
+	@echo "  prod-backup   executa um backup manual (pg_dump → MinIO)"
 
 install:
 	pnpm install
@@ -92,3 +101,26 @@ TEST_DATABASE_URL ?= postgresql://gotardo:gotardo@localhost:5432/gotardo_test?sc
 test-db-setup:
 	docker exec gotardo-dev-postgres-1 psql -U gotardo -d gotardo -tc "SELECT 1 FROM pg_database WHERE datname='gotardo_test'" | grep -q 1 || docker exec gotardo-dev-postgres-1 createdb -U gotardo gotardo_test
 	cd packages/db && DATABASE_URL="$(TEST_DATABASE_URL)" pnpm exec prisma migrate deploy
+
+PROD_COMPOSE := docker compose -f compose.prod.yaml
+
+prod-up:
+	$(PROD_COMPOSE) up -d --build
+
+prod-build:
+	$(PROD_COMPOSE) build
+
+prod-down:
+	$(PROD_COMPOSE) down
+
+prod-down-volumes:
+	$(PROD_COMPOSE) down -v
+
+prod-logs:
+	$(PROD_COMPOSE) logs -f
+
+prod-ps:
+	$(PROD_COMPOSE) ps
+
+prod-backup:
+	$(PROD_COMPOSE) run --rm backup /backup.sh --once
