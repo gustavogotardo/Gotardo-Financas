@@ -11,6 +11,7 @@ import { FamilyModule } from '../family/family.module';
 import { AccountsModule } from '../accounts/accounts.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { TransactionsModule } from '../transactions/transactions.module';
+import { EnvelopesModule } from '../envelopes/envelopes.module';
 import { HealthModule } from '../health/health.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -58,6 +59,7 @@ describe('Auth e isolamento de tenant (e2e)', () => {
         AccountsModule,
         CategoriesModule,
         TransactionsModule,
+        EnvelopesModule,
         HealthModule,
       ],
       providers: [
@@ -78,6 +80,10 @@ describe('Auth e isolamento de tenant (e2e)', () => {
   afterAll(async () => {
     if (createdFamilies.length > 0) {
       await prisma.transaction.deleteMany({ where: { familyId: { in: createdFamilies } } });
+      await prisma.envelopeAllocation.deleteMany({
+        where: { envelope: { familyId: { in: createdFamilies } } },
+      });
+      await prisma.envelope.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.category.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.invitation.deleteMany({ where: { familyId: { in: createdFamilies } } });
@@ -658,5 +664,179 @@ describe('Auth e isolamento de tenant (e2e)', () => {
       .set('Authorization', `Bearer ${tokensMember.accessToken}`)
       .send({ accountId, description: 'Invasão', amount: 1, type: 'EXPENSE' });
     expect(memberCreate.status).toBe(403);
+  });
+
+  it('envelopes: CRUD, alocações e resumo alocado - gasto', async () => {
+    const email = emailFor('env-a');
+    const reg = await register('Env A', email, `Família Env A ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    createdFamilies.push((meRes.body as MeResponse).familyId);
+
+    const create = await request(app.getHttpServer())
+      .post('/api/v1/envelopes')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Mercado', icon: '🛒', targetAmount: 1000 });
+    expect(create.status).toBe(201);
+    const envelopeId = (create.body as { id: string }).id;
+    expect((create.body as { balance: string }).balance).toBe('0');
+
+    const allocate = await request(app.getHttpServer())
+      .post(`/api/v1/envelopes/${envelopeId}/allocations`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ amount: 500, note: 'Fundando o mês' });
+    expect(allocate.status).toBe(201);
+
+    const allocations = await request(app.getHttpServer())
+      .get(`/api/v1/envelopes/${envelopeId}/allocations`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(allocations.status).toBe(200);
+    expect(allocations.body).toHaveLength(1);
+
+    const createAccount = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Conta Env' });
+    const accountId = (createAccount.body as { id: string }).id;
+
+    const createCategory = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Alimentação Env' });
+    const categoryId = (createCategory.body as { id: string }).id;
+
+    const tx = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({
+        accountId,
+        categoryId,
+        envelopeId,
+        description: 'Mercado',
+        amount: 120,
+        type: 'EXPENSE',
+        status: 'CONFIRMED',
+      });
+    expect(tx.status).toBe(201);
+
+    const summary = await request(app.getHttpServer())
+      .get(`/api/v1/envelopes/${envelopeId}`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(summary.status).toBe(200);
+    const body = summary.body as { allocated: string; spent: string; balance: string };
+    expect(body.allocated).toBe('500');
+    expect(body.spent).toBe('120');
+    expect(body.balance).toBe('380');
+
+    const update = await request(app.getHttpServer())
+      .patch(`/api/v1/envelopes/${envelopeId}`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ targetAmount: 1200, isActive: false });
+    expect(update.status).toBe(200);
+    expect((update.body as { targetAmount: string }).targetAmount).toBe('1200');
+    expect((update.body as { isActive: boolean }).isActive).toBe(false);
+
+    const deleteWithTx = await request(app.getHttpServer())
+      .delete(`/api/v1/envelopes/${envelopeId}`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(deleteWithTx.status).toBe(409);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/transactions/${(tx.body as { id: string }).id}`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+
+    const deleteOk = await request(app.getHttpServer())
+      .delete(`/api/v1/envelopes/${envelopeId}`)
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(deleteOk.status).toBe(204);
+  });
+
+  it('envelopes: isolamento entre tenants', async () => {
+    const emailA = emailFor('envi-a');
+    const regA = await register('Envi A', emailA, `Família Envi A ${suffix}`);
+    const tokensA = regA.body as TokensResponse;
+    const meA = await me(tokensA.accessToken);
+    createdFamilies.push((meA.body as MeResponse).familyId);
+
+    const env = await request(app.getHttpServer())
+      .post('/api/v1/envelopes')
+      .set('Authorization', `Bearer ${tokensA.accessToken}`)
+      .send({ name: 'Envelope A' });
+    expect(env.status).toBe(201);
+    const envelopeId = (env.body as { id: string }).id;
+
+    const emailB = emailFor('envi-b');
+    const regB = await register('Envi B', emailB, `Família Envi B ${suffix}`);
+    const tokensB = regB.body as TokensResponse;
+    const meB = await me(tokensB.accessToken);
+    createdFamilies.push((meB.body as MeResponse).familyId);
+
+    const listB = await request(app.getHttpServer())
+      .get('/api/v1/envelopes')
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(listB.status).toBe(200);
+    expect(listB.body).toHaveLength(0);
+
+    const getB = await request(app.getHttpServer())
+      .get(`/api/v1/envelopes/${envelopeId}`)
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(getB.status).toBe(404);
+
+    const allocateB = await request(app.getHttpServer())
+      .post(`/api/v1/envelopes/${envelopeId}/allocations`)
+      .set('Authorization', `Bearer ${tokensB.accessToken}`)
+      .send({ amount: 1 });
+    expect(allocateB.status).toBe(404);
+
+    const patchB = await request(app.getHttpServer())
+      .patch(`/api/v1/envelopes/${envelopeId}`)
+      .set('Authorization', `Bearer ${tokensB.accessToken}`)
+      .send({ name: 'Invasão' });
+    expect(patchB.status).toBe(404);
+  });
+
+  it('MEMBER lê envelopes mas não cria nem aloca', async () => {
+    const emailOwner = emailFor('epm-owner');
+    const regOwner = await register('Epm Owner', emailOwner, `Família Epm ${suffix}`);
+    const tokensOwner = regOwner.body as TokensResponse;
+    const meOwner = await me(tokensOwner.accessToken);
+    createdFamilies.push((meOwner.body as MeResponse).familyId);
+
+    const env = await request(app.getHttpServer())
+      .post('/api/v1/envelopes')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ name: 'Envelope Epm' });
+    const envelopeId = (env.body as { id: string }).id;
+
+    const invite = await request(app.getHttpServer())
+      .post('/api/v1/family/invitations')
+      .set('Authorization', `Bearer ${tokensOwner.accessToken}`)
+      .send({ email: emailFor('epm-member') });
+    const accept = await request(app.getHttpServer())
+      .post('/api/v1/auth/accept-invitation')
+      .send({
+        token: (invite.body as { inviteToken: string }).inviteToken,
+        name: 'Epm Member',
+        password: 'senha-segura-123',
+      });
+    const tokensMember = accept.body as TokensResponse;
+
+    const memberList = await request(app.getHttpServer())
+      .get('/api/v1/envelopes')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`);
+    expect(memberList.status).toBe(200);
+    expect(memberList.body).toHaveLength(1);
+
+    const memberCreate = await request(app.getHttpServer())
+      .post('/api/v1/envelopes')
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`)
+      .send({ name: 'Invasão' });
+    expect(memberCreate.status).toBe(403);
+
+    const memberAllocate = await request(app.getHttpServer())
+      .post(`/api/v1/envelopes/${envelopeId}/allocations`)
+      .set('Authorization', `Bearer ${tokensMember.accessToken}`)
+      .send({ amount: 10 });
+    expect(memberAllocate.status).toBe(403);
   });
 });

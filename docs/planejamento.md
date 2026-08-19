@@ -94,8 +94,11 @@ Sequência até o alfa (após E0.5/E0.6):
   quando existir), saldo da conta atualizado automaticamente ao confirmar
   (PENDING → CONFIRMED reverte/ajusta), fluxo de revisão por status. TRANSFER não
   altera saldo até a modelagem de conta destino.
+- **E0.10 — Envelopes**: CRUD de envelopes (meta `targetAmount`), alocações
+  (funding) e resumo por envelope `alocado − gasto` (EXPENSE confirmado);
+  exclusão bloqueada com transações vinculadas.
 
-### E0.10 — Orçamento por envelopes (PRÓXIMA)
+### E0.11 — Relatórios básicos (PRÓXIMA)
 
 ### E0.5/E0.6 — Autenticação e isolamento por tenant
 

@@ -111,8 +111,12 @@ saldo da conta atualizado automaticamente ao confirmar (PENDING → CONFIRMED,
 incluindo edição e exclusão que revertem/ajustam) e fluxo de revisão por status.
 Papéis: OWNER/ADMIN gerenciam; MEMBER/VIEWER leem.
 
-Próximas etapas do backlog: E0.10 (envelopes), E0.11 (relatórios), até o marco
-ALFA (E0.12, deploy on-prem).
+Fase E0.10 (envelopes) concluída: CRUD de envelopes com meta (`targetAmount`),
+alocações/funding e resumo por envelope `alocado − gasto` (despesas confirmadas).
+Papéis: OWNER/ADMIN gerenciam; MEMBER/VIEWER leem.
+
+Próximas etapas do backlog: E0.11 (relatórios), até o marco ALFA (E0.12, deploy
+on-prem).
 
 ## Decisões de produto
 
