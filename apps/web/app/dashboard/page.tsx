@@ -70,6 +70,8 @@ export default function DashboardPage() {
   const [showForm, setShowForm] = useState(false);
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<AccountRecord | null>(null);
+  const [editingCategory, setEditingCategory] = useState<CategoryRecord | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -161,34 +163,6 @@ export default function DashboardPage() {
       setError(err instanceof Error ? err.message : 'Falha ao confirmar a transação.');
     } finally {
       setConfirmingId(null);
-    }
-  }
-
-  async function deleteCategory(id: string, name: string) {
-    if (!window.confirm(`Excluir a categoria "${name}"?`)) return;
-    setDeletingId(id);
-    setError(null);
-    try {
-      await apiFetch(`/api/v1/categories/${id}`, { method: 'DELETE' });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao excluir a categoria.');
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  async function deleteAccount(id: string, name: string) {
-    if (!window.confirm(`Excluir a conta "${name}"?`)) return;
-    setDeletingId(id);
-    setError(null);
-    try {
-      await apiFetch(`/api/v1/accounts/${id}`, { method: 'DELETE' });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao excluir a conta.');
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -306,16 +280,29 @@ export default function DashboardPage() {
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => setShowAccountForm((show) => !show)}
+                    onClick={() => {
+                      setEditingAccount(null);
+                      setShowAccountForm((show) => !show);
+                    }}
                   >
-                    {showAccountForm ? 'Fechar' : '+ Nova conta'}
+                    {showAccountForm || editingAccount ? 'Fechar' : '+ Nova conta'}
                   </Button>
                 ) : null}
               </div>
-              {showAccountForm ? (
+              {editingAccount ? (
+                <AccountForm
+                  account={editingAccount}
+                  onCancel={() => setEditingAccount(null)}
+                  onDone={async () => {
+                    setEditingAccount(null);
+                    setShowAccountForm(false);
+                    await load();
+                  }}
+                />
+              ) : showAccountForm ? (
                 <AccountForm
                   onCancel={() => setShowAccountForm(false)}
-                  onCreated={async () => {
+                  onDone={async () => {
                     setShowAccountForm(false);
                     await load();
                   }}
@@ -347,10 +334,12 @@ export default function DashboardPage() {
                               <Button
                                 type="button"
                                 variant="ghost"
-                                disabled={deletingId === account.id}
-                                onClick={() => void deleteAccount(account.id, account.name)}
+                                onClick={() => {
+                                  setShowAccountForm(false);
+                                  setEditingAccount(account);
+                                }}
                               >
-                                Excluir
+                                Editar
                               </Button>
                             </td>
                           ) : null}
@@ -369,17 +358,31 @@ export default function DashboardPage() {
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => setShowCategoryForm((show) => !show)}
+                    onClick={() => {
+                      setEditingCategory(null);
+                      setShowCategoryForm((show) => !show);
+                    }}
                   >
-                    {showCategoryForm ? 'Fechar' : '+ Nova categoria'}
+                    {showCategoryForm || editingCategory ? 'Fechar' : '+ Nova categoria'}
                   </Button>
                 ) : null}
               </div>
-              {showCategoryForm ? (
+              {editingCategory ? (
+                <CategoryForm
+                  category={editingCategory}
+                  categories={data.categories}
+                  onCancel={() => setEditingCategory(null)}
+                  onDone={async () => {
+                    setEditingCategory(null);
+                    setShowCategoryForm(false);
+                    await load();
+                  }}
+                />
+              ) : showCategoryForm ? (
                 <CategoryForm
                   categories={data.categories}
                   onCancel={() => setShowCategoryForm(false)}
-                  onCreated={async () => {
+                  onDone={async () => {
                     setShowCategoryForm(false);
                     await load();
                   }}
@@ -400,7 +403,6 @@ export default function DashboardPage() {
                     <tbody>
                       {groupedCategories.parents.map((parent) => {
                         const children = groupedCategories.childrenByParent.get(parent.id) ?? [];
-                        const hasChildren = children.length > 0;
                         return (
                           <Fragment key={parent.id}>
                             <tr>
@@ -408,23 +410,16 @@ export default function DashboardPage() {
                               <td className="muted">{parent.icon ?? '—'}</td>
                               {canManage ? (
                                 <td>
-                                  {hasChildren ? (
-                                    <span
-                                      className="muted"
-                                      title="Exclua as subcategorias primeiro"
-                                    >
-                                      —
-                                    </span>
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      disabled={deletingId === parent.id}
-                                      onClick={() => void deleteCategory(parent.id, parent.name)}
-                                    >
-                                      Excluir
-                                    </Button>
-                                  )}
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setShowCategoryForm(false);
+                                      setEditingCategory(parent);
+                                    }}
+                                  >
+                                    Editar
+                                  </Button>
                                 </td>
                               ) : null}
                             </tr>
@@ -440,10 +435,12 @@ export default function DashboardPage() {
                                     <Button
                                       type="button"
                                       variant="ghost"
-                                      disabled={deletingId === child.id}
-                                      onClick={() => void deleteCategory(child.id, child.name)}
+                                      onClick={() => {
+                                        setShowCategoryForm(false);
+                                        setEditingCategory(child);
+                                      }}
                                     >
-                                      Excluir
+                                      Editar
                                     </Button>
                                   </td>
                                 ) : null}
@@ -464,10 +461,12 @@ export default function DashboardPage() {
                               <Button
                                 type="button"
                                 variant="ghost"
-                                disabled={deletingId === child.id}
-                                onClick={() => void deleteCategory(child.id, child.name)}
+                                onClick={() => {
+                                  setShowCategoryForm(false);
+                                  setEditingCategory(child);
+                                }}
                               >
-                                Excluir
+                                Editar
                               </Button>
                             </td>
                           ) : null}

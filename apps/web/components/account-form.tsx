@@ -1,50 +1,70 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { apiFetch, type CreateAccountInput } from '@/lib/api';
+import { apiFetch, type AccountRecord, type CreateAccountInput } from '@/lib/api';
 import { accountTypeLabel } from '@/lib/format';
 import { Button, Card, ErrorBox, Field, Input, Select } from './ui';
 
 const ACCOUNT_TYPES = ['CHECKING', 'SAVINGS', 'INVESTMENT', 'CASH'];
 
 type Props = {
-  onCreated: () => Promise<void>;
+  account?: AccountRecord;
+  onDone: () => Promise<void>;
   onCancel: () => void;
 };
 
-export function AccountForm({ onCreated, onCancel }: Props) {
+export function AccountForm({ account, onDone, onCancel }: Props) {
+  const isEdit = Boolean(account);
   const [form, setForm] = useState<CreateAccountInput>({
-    name: '',
-    type: 'CHECKING',
-    institution: '',
+    name: account?.name ?? '',
+    type: account?.type ?? 'CHECKING',
+    institution: account?.institution ?? '',
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await apiFetch('/api/v1/accounts', {
-        method: 'POST',
+      if (isEdit && !account) return;
+      const accountId = account?.id ?? '';
+      await apiFetch(isEdit ? `/api/v1/accounts/${accountId}` : '/api/v1/accounts', {
+        method: isEdit ? 'PATCH' : 'POST',
         body: JSON.stringify({
           name: form.name,
           type: form.type,
           ...(form.institution ? { institution: form.institution } : {}),
         }),
       });
-      await onCreated();
+      await onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao criar a conta.');
+      setError(err instanceof Error ? err.message : 'Falha ao salvar a conta.');
     } finally {
       setSubmitting(false);
     }
   }
 
+  async function handleDelete() {
+    if (!account) return;
+    if (!window.confirm(`Excluir a conta "${account.name}"?`)) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/v1/accounts/${account.id}`, { method: 'DELETE' });
+      await onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao excluir a conta.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <Card className="form-card">
-      <h3 className="form-title">Nova conta</h3>
+      <h3 className="form-title">{isEdit ? 'Editar conta' : 'Nova conta'}</h3>
       <form onSubmit={onSubmit}>
         <div className="form-grid">
           <Field label="Nome">
@@ -80,8 +100,18 @@ export function AccountForm({ onCreated, onCancel }: Props) {
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancelar
           </Button>
+          {isEdit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
+            >
+              {deleting ? 'Excluindo…' : 'Excluir conta'}
+            </Button>
+          ) : null}
           <Button type="submit" disabled={submitting}>
-            {submitting ? 'Salvando…' : 'Criar conta'}
+            {submitting ? 'Salvando…' : isEdit ? 'Salvar' : 'Criar conta'}
           </Button>
         </div>
       </form>

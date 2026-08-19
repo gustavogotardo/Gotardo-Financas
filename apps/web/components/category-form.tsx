@@ -5,42 +5,67 @@ import { apiFetch, type CategoryRecord, type CreateCategoryInput } from '@/lib/a
 import { Button, Card, ErrorBox, Field, Input, Select } from './ui';
 
 type Props = {
+  category?: CategoryRecord;
   categories: CategoryRecord[];
-  onCreated: () => Promise<void>;
+  onDone: () => Promise<void>;
   onCancel: () => void;
 };
 
-export function CategoryForm({ categories, onCreated, onCancel }: Props) {
-  const [form, setForm] = useState<CreateCategoryInput>({ name: '', icon: '', parentId: '' });
+export function CategoryForm({ category, categories, onDone, onCancel }: Props) {
+  const isEdit = Boolean(category);
+  const [form, setForm] = useState<CreateCategoryInput>({
+    name: category?.name ?? '',
+    icon: category?.icon ?? '',
+    parentId: category?.parentId ?? '',
+  });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const parents = categories.filter((item) => !item.parentId && item.id !== category?.id);
+  const hasChildren = Boolean(category && categories.some((item) => item.parentId === category.id));
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await apiFetch('/api/v1/categories', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: form.name,
-          ...(form.icon ? { icon: form.icon } : {}),
-          ...(form.parentId ? { parentId: form.parentId } : {}),
-        }),
+      const payload: Record<string, unknown> = { name: form.name };
+      if (form.icon) payload.icon = form.icon;
+      if (isEdit && !category) return;
+      if (isEdit) payload.parentId = form.parentId || null;
+      else if (form.parentId) payload.parentId = form.parentId;
+      const categoryId = category?.id ?? '';
+      await apiFetch(isEdit ? `/api/v1/categories/${categoryId}` : '/api/v1/categories', {
+        method: isEdit ? 'PATCH' : 'POST',
+        body: JSON.stringify(payload),
       });
-      await onCreated();
+      await onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao criar a categoria.');
+      setError(err instanceof Error ? err.message : 'Falha ao salvar a categoria.');
     } finally {
       setSubmitting(false);
     }
   }
 
-  const parents = categories.filter((category) => !category.parentId);
+  async function handleDelete() {
+    if (!category) return;
+    if (!window.confirm(`Excluir a categoria "${category.name}"?`)) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/v1/categories/${category.id}`, { method: 'DELETE' });
+      await onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao excluir a categoria.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <Card className="form-card">
-      <h3 className="form-title">Nova categoria</h3>
+      <h3 className="form-title">{isEdit ? 'Editar categoria' : 'Nova categoria'}</h3>
       <form onSubmit={onSubmit}>
         <div className="form-grid">
           <Field label="Nome">
@@ -57,9 +82,9 @@ export function CategoryForm({ categories, onCreated, onCancel }: Props) {
               onChange={(e) => setForm((prev) => ({ ...prev, parentId: e.target.value }))}
             >
               <option value="">Sem categoria pai</option>
-              {parents.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
+              {parents.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
                 </option>
               ))}
             </Select>
@@ -77,8 +102,19 @@ export function CategoryForm({ categories, onCreated, onCancel }: Props) {
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancelar
           </Button>
+          {isEdit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void handleDelete()}
+              disabled={deleting || hasChildren}
+              title={hasChildren ? 'Exclua as subcategorias primeiro' : undefined}
+            >
+              {deleting ? 'Excluindo…' : hasChildren ? 'Tem subcategorias' : 'Excluir categoria'}
+            </Button>
+          ) : null}
           <Button type="submit" disabled={submitting}>
-            {submitting ? 'Salvando…' : 'Criar categoria'}
+            {submitting ? 'Salvando…' : isEdit ? 'Salvar' : 'Criar categoria'}
           </Button>
         </div>
       </form>
