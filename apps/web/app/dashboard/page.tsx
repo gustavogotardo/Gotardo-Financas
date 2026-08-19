@@ -392,25 +392,25 @@ export default function DashboardPage() {
                               <td>{tx.description}</td>
                               <td>{tx.category?.name ?? '—'}</td>
                               <td className="muted">{tx.account?.name ?? '—'}</td>
-<td>
-                          <Badge tone={statusTone(tx.status)}>{statusLabel(tx.status)}</Badge>
-                        </td>
-                        <td className={`td-num ${positive ? 'td-pos' : 'td-neg'}`}>
-                          {positive ? '+' : '−'}
-                          {brl(tx.amount)}
-                        </td>
-                        <td>
-                          {canManage && tx.status === 'PENDING' ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              disabled={confirmingId === tx.id}
-                              onClick={() => void confirmTransaction(tx.id)}
-                            >
-                              {confirmingId === tx.id ? 'Confirmando…' : 'Confirmar'}
-                            </Button>
-                          ) : null}
-                        </td>
+                              <td>
+                                <Badge tone={statusTone(tx.status)}>{statusLabel(tx.status)}</Badge>
+                              </td>
+                              <td className={`td-num ${positive ? 'td-pos' : 'td-neg'}`}>
+                                {positive ? '+' : '−'}
+                                {brl(tx.amount)}
+                              </td>
+                              <td>
+                                {canManage && tx.status === 'PENDING' ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    disabled={confirmingId === tx.id}
+                                    onClick={() => void confirmTransaction(tx.id)}
+                                  >
+                                    {confirmingId === tx.id ? 'Confirmando…' : 'Confirmar'}
+                                  </Button>
+                                ) : null}
+                              </td>
                             </tr>
                           );
                         })}
