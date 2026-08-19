@@ -54,3 +54,18 @@ const STATUS_LABELS: Record<string, string> = {
 export function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  PIX: 'Pix',
+  BOLETO: 'Boleto',
+  CREDIT_CARD: 'Cartão de crédito',
+  DEBIT_CARD: 'Cartão de débito',
+  TRANSFER: 'Transferência',
+  CASH: 'Dinheiro',
+  OTHER: 'Outro',
+};
+
+export function paymentMethodLabel(method: string | null): string {
+  if (!method) return 'Sem método';
+  return PAYMENT_METHOD_LABELS[method] ?? method;
+}

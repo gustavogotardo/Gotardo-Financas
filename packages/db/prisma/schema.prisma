@@ -60,6 +60,16 @@ enum DocumentStatus {
   FAILED
 }
 
+enum PaymentMethod {
+  PIX
+  BOLETO
+  CREDIT_CARD
+  DEBIT_CARD
+  TRANSFER
+  CASH
+  OTHER
+}
+
 // --- Tenant (isolamento por família) ---
 
 model Family {
@@ -216,7 +226,7 @@ model Transaction {
   status        TransactionStatus  @default(PENDING)
   source        TransactionSource  @default(MANUAL)
   externalId    String?
-  paymentMethod String?
+  paymentMethod PaymentMethod?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   deletedAt     DateTime?

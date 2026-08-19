@@ -221,6 +221,36 @@ a:hover {
   font-size: 1.35rem;
 }
 
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.month-label {
+  font-weight: 600;
+  min-width: 8.5rem;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.method-block {
+  margin-bottom: 0.9rem;
+  padding: 1rem 1.25rem;
+}
+
+.method-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.method-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

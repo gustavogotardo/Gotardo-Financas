@@ -25,6 +25,16 @@ export enum AccountType {
   CASH = 'CASH',
 }
 
+export enum PaymentMethod {
+  PIX = 'PIX',
+  BOLETO = 'BOLETO',
+  CREDIT_CARD = 'CREDIT_CARD',
+  DEBIT_CARD = 'DEBIT_CARD',
+  TRANSFER = 'TRANSFER',
+  CASH = 'CASH',
+  OTHER = 'OTHER',
+}
+
 export enum Currency {
   BRL = 'BRL',
 }

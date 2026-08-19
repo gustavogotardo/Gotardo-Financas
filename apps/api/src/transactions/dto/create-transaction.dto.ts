@@ -9,7 +9,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { TransactionSource, TransactionStatus, TransactionType } from '@gotardo/db';
+import { PaymentMethod, TransactionSource, TransactionStatus, TransactionType } from '@gotardo/db';
 
 export class CreateTransactionDto {
   @IsString()
@@ -50,7 +50,6 @@ export class CreateTransactionDto {
   source?: TransactionSource;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  paymentMethod?: string;
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
 }

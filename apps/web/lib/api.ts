@@ -41,9 +41,18 @@ export type TransactionRecord = {
   amount: string;
   type: string;
   status: string;
+  paymentMethod: string | null;
   account: { id: string; name: string } | null;
   category: { id: string; name: string; parentId: string | null } | null;
   createdAt: string;
+};
+
+export type PaymentMethodRow = {
+  method: string | null;
+  label: string;
+  income: string;
+  expense: string;
+  count: number;
 };
 
 export class ApiError extends Error {

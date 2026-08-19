@@ -1,7 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, TransactionStatus, TransactionType } from '@gotardo/db';
+import { PaymentMethod, Prisma, TransactionStatus, TransactionType } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import type { AuthUser } from '../common/auth-user';
+
+export type PaymentMethodRow = {
+  method: string | null;
+  label: string;
+  income: string;
+  expense: string;
+  count: number;
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  [PaymentMethod.PIX]: 'Pix',
+  [PaymentMethod.BOLETO]: 'Boleto',
+  [PaymentMethod.CREDIT_CARD]: 'Cartão de crédito',
+  [PaymentMethod.DEBIT_CARD]: 'Cartão de débito',
+  [PaymentMethod.TRANSFER]: 'Transferência',
+  [PaymentMethod.CASH]: 'Dinheiro',
+  [PaymentMethod.OTHER]: 'Outro',
+};
 
 export type CashflowMonth = {
   month: string;
@@ -146,6 +164,37 @@ export class ReportsService {
         total: (group._sum.amount ?? new Prisma.Decimal(0)).toString(),
       }))
       .sort((a, b) => Number(b.total) - Number(a.total));
+  }
+
+  async paymentMethods(user: AuthUser, from?: Date, to?: Date): Promise<PaymentMethodRow[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ method: string; income: Prisma.Decimal; expense: Prisma.Decimal; count: number }>
+    >(
+      Prisma.sql`
+        SELECT COALESCE("paymentMethod"::text, '') AS method,
+               COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense,
+               COUNT(*)::int AS count
+        FROM "Transaction"
+        WHERE "familyId" = ${user.familyId}
+          AND "deletedAt" IS NULL
+          AND status = 'CONFIRMED'
+          ${from ? Prisma.sql`AND date >= ${from}` : Prisma.empty}
+          ${to ? Prisma.sql`AND date <= ${to}` : Prisma.empty}
+        GROUP BY "paymentMethod"
+        ORDER BY expense DESC, income DESC
+      `,
+    );
+    return rows.map((row) => {
+      const isNullMethod = row.method === '';
+      return {
+        method: isNullMethod ? null : row.method,
+        label: isNullMethod ? 'Sem método' : (PAYMENT_METHOD_LABELS[row.method] ?? row.method),
+        income: row.income.toString(),
+        expense: row.expense.toString(),
+        count: Number(row.count),
+      };
+    });
   }
 
   async accountStatement(

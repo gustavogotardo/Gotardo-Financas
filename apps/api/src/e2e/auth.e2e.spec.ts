@@ -1121,4 +1121,143 @@ describe('Auth e isolamento de tenant (e2e)', () => {
       .set('Authorization', `Bearer ${tokensMember.accessToken}`);
     expect(memberCashflow.status).toBe(200);
   });
+
+  it('relatórios: gastos por forma de pagamento', async () => {
+    const email = emailFor('pay-a');
+    const reg = await register('Pay A', email, `Família Pay A ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    createdFamilies.push((meRes.body as MeResponse).familyId);
+
+    const acc = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Conta Pay' });
+    const accountId = (acc.body as { id: string }).id;
+
+    const createTx = (body: object) =>
+      request(app.getHttpServer())
+        .post('/api/v1/transactions')
+        .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .send(body);
+
+    await createTx({
+      accountId,
+      description: 'Salário via Pix',
+      amount: 1000,
+      type: 'INCOME',
+      status: 'CONFIRMED',
+      paymentMethod: 'PIX',
+      date: '2026-08-05T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Mercado Pix',
+      amount: 150,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      paymentMethod: 'PIX',
+      date: '2026-08-06T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Conta de luz',
+      amount: 120,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      paymentMethod: 'BOLETO',
+      date: '2026-08-07T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Aluguel',
+      amount: 800,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      paymentMethod: 'CREDIT_CARD',
+      date: '2026-08-08T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Sem método',
+      amount: 50,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: '2026-08-09T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Pendente Pix',
+      amount: 999,
+      type: 'EXPENSE',
+      status: 'PENDING',
+      paymentMethod: 'PIX',
+      date: '2026-08-10T00:00:00.000Z',
+    });
+    await createTx({
+      accountId,
+      description: 'Boleto julho',
+      amount: 70,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      paymentMethod: 'BOLETO',
+      date: '2026-07-20T00:00:00.000Z',
+    });
+
+    const invalid = await createTx({
+      accountId,
+      description: 'Método inválido',
+      amount: 10,
+      type: 'EXPENSE',
+      paymentMethod: 'CREDITO',
+    });
+    expect(invalid.status).toBe(400);
+
+    const rows = await request(app.getHttpServer())
+      .get('/api/v1/reports/payment-methods')
+      .query({ from: '2026-08-01T00:00:00.000Z', to: '2026-08-31T23:59:59.000Z' })
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+    expect(rows.status).toBe(200);
+    const body = rows.body as {
+      method: string | null;
+      label: string;
+      income: string;
+      expense: string;
+      count: number;
+    }[];
+    expect(body).toHaveLength(4);
+
+    const byLabel = new Map(body.map((row) => [row.label, row]));
+
+    const creditCard = byLabel.get('Cartão de crédito')!;
+    expect(creditCard.income).toBe('0');
+    expect(creditCard.expense).toBe('800');
+    expect(creditCard.count).toBe(1);
+
+    const pix = byLabel.get('Pix')!;
+    expect(pix.income).toBe('1000');
+    expect(pix.expense).toBe('150');
+    expect(pix.count).toBe(2);
+
+    const boleto = byLabel.get('Boleto')!;
+    expect(boleto.expense).toBe('120');
+    expect(boleto.count).toBe(1);
+
+    const semMetodo = byLabel.get('Sem método')!;
+    expect(semMetodo.method).toBeNull();
+    expect(semMetodo.expense).toBe('50');
+    expect(semMetodo.count).toBe(1);
+
+    const emailB = emailFor('pay-b');
+    const regB = await register('Pay B', emailB, `Família Pay B ${suffix}`);
+    const tokensB = regB.body as TokensResponse;
+    const meB = await me(tokensB.accessToken);
+    createdFamilies.push((meB.body as MeResponse).familyId);
+
+    const foreign = await request(app.getHttpServer())
+      .get('/api/v1/reports/payment-methods')
+      .set('Authorization', `Bearer ${tokensB.accessToken}`);
+    expect(foreign.status).toBe(200);
+    expect(foreign.body).toHaveLength(0);
+  });
 });

@@ -5,6 +5,7 @@ import {
   type CashflowResponse,
   type CategoryExpenseRow,
   type EnvelopeExpenseRow,
+  type PaymentMethodRow,
 } from './reports.service';
 import type { AuthUser } from '../common/auth-user';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -36,6 +37,14 @@ export class ReportsController {
     @Query() query: ReportRangeDto,
   ): Promise<EnvelopeExpenseRow[]> {
     return this.reports.expensesByEnvelope(user, query.from, query.to);
+  }
+
+  @Get('payment-methods')
+  paymentMethods(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ReportRangeDto,
+  ): Promise<PaymentMethodRow[]> {
+    return this.reports.paymentMethods(user, query.from, query.to);
   }
 
   @Get('account-statement/:accountId')
