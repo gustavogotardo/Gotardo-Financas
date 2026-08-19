@@ -55,6 +55,25 @@ modelos de dados do tenant — base do isolamento.
 
 ## 4. Roadmap
 
+### Marco ALFA
+
+Uma versão **alfa** entrega o ciclo real de uso da família: registro/login,
+contas, categorias, transações manuais e orçamento por envelopes, rodando no
+servidor físico (on-prem) com HTTPS. Importação de extratos, ML, OCR e PWA
+avançado ficam para depois do alfa.
+
+Sequência até o alfa (após E0.5/E0.6):
+
+1. **E0.5/E0.6** — autenticação e isolamento por tenant.
+2. **E0.8** — CRUD de contas e categorias (com isolamento).
+3. **E0.9** — CRUD de transações (manual, com categorias/envelopes).
+4. **E0.10** — orçamento por envelopes (alocações, saldo, metas).
+5. **E0.11** — relatórios básicos (fluxo de caixa, por categoria, por envelope).
+6. **E0.12** — deploy de produção (Compose on-prem, HTTPS, backups, `migrate deploy`).
+
+> **E0.7 (fila/async)** fica opcional para o alfa — entra antes apenas se a
+> importação de extratos for priorizada antes do deploy.
+
 ### Concluídas
 
 - **E0.1 — Fundação do monorepo**: workspaces, configs base (TS, ESLint flat,
@@ -102,13 +121,37 @@ campos já presentes em `User` (passwordHash, role, familyId).
 - Integração BullMQ com Redis (já provisionado).
 - Enfileirar jobs: importação de extrato, OCR, categorização via ML.
 - Retries, backoff e dashboard (Bull Board) em dev.
+- **Opcional para o alfa** — só entra antes do deploy se a importação for priorizada.
 
-### Fase de domínio (após E0.7)
+### E0.8 — Contas e categorias
 
-- CRUD de contas, categorias e transações com isolamento de tenant.
-- **Importação de extratos** (OFX/CSV) e integração com MinIO (`Document`).
-- **Orçamento por envelopes**: alocações, saldo por envelope, metas.
-- **Relatórios**: fluxo de caixa, por categoria, por envelope, mensal.
+- CRUD de `Account` e `Category` com isolamento por tenant.
+- Categorias hierárquicas (subcategoria via `parentId`).
+- Restrições por papel (OWNER/ADMIN gerenciam; MEMBER/VIEWER leem).
+
+### E0.9 — Transações
+
+- CRUD de `Transaction` (manual), vínculo com conta, categoria e envelope.
+- Atualização do saldo da conta ao confirmar transação.
+- Fluxo de revisão (status PENDING → CONFIRMED/REJECTED/REVIEW).
+
+### E0.10 — Orçamento por envelopes
+
+- `EnvelopeAllocation` (alocação/funding), saldo por envelope, metas mensais.
+- Resumo por envelope (alocado − gasto).
+
+### E0.11 — Relatórios básicos
+
+- Fluxo de caixa (entradas vs. saídas por período).
+- Gastos por categoria e por envelope.
+- Extrato por conta/período.
+
+### E0.12 — Deploy de produção (on-prem)
+
+- Docker Compose de produção: postgres, redis, minio, api, web, ml.
+- HTTPS (Caddy/Traefik), backups automatizados (pg_dump + MinIO), rotacionamento de logs.
+- Migração de schema via `prisma migrate deploy`.
+- Conclusão do marco **ALFA**.
 
 ### Serviços ML (P1) — `services/ml`
 
@@ -121,11 +164,11 @@ campos já presentes em `User` (passwordHash, role, familyId).
 - Somente texto embutido de PDF no MVP; escaneados exigem OCR local (PaddleOCR).
 - Esqueleto já existe; implementação apenas na Fase 3.
 
-### Deploy (produção)
+### Pós-alfa (beta)
 
-- Docker Compose de produção (on-prem): postgres, redis, minio, api, web, ml.
-- HTTPS (Caddy/Traefik), backups automatizados (pg_dump + MinIO), rotacionamento de logs.
-- Migração de schema via `prisma migrate deploy`.
+- **Importação de extratos** (OFX/CSV) e integração com MinIO (`Document`), via fila.
+- **PWA avançado** (offline, instalação) e ajustes de UX.
+- Refinamento de relatórios e painel da família.
 
 ## 5. Decisões de produto (registro)
 
