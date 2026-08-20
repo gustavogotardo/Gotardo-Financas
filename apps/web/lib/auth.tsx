@@ -15,6 +15,7 @@ type AuthState = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
+  acceptInvitation: (token: string, name: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -78,6 +79,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyTokens],
   );
 
+  const acceptInvitation = useCallback(
+    async (token: string, name: string, password: string) => {
+      const tokens = await apiFetch<AuthTokens>('/api/v1/auth/accept-invitation', {
+        method: 'POST',
+        body: JSON.stringify({ token, name, password }),
+      });
+      applyTokens(tokens);
+      const me = await apiFetch<MeResponse>('/api/v1/auth/me');
+      setUser(me);
+    },
+    [applyTokens],
+  );
+
   const logout = useCallback(async () => {
     const current = getTokens();
     if (current?.refreshToken) {
@@ -94,7 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyTokens]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, register, acceptInvitation, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

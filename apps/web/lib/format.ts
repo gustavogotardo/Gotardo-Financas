@@ -75,3 +75,14 @@ export function paymentMethodLabel(method: string | null): string {
   if (!method) return 'Sem método';
   return PAYMENT_METHOD_LABELS[method] ?? method;
 }
+
+const ROLE_LABELS: Record<string, string> = {
+  OWNER: 'Proprietário',
+  ADMIN: 'Administrador',
+  MEMBER: 'Membro',
+  VIEWER: 'Leitor',
+};
+
+export function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? role;
+}

@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { Suspense, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { Button, Card, ErrorBox, Field, Input } from '@/components/ui';
 
-export default function RegisterPage() {
-  const { register } = useAuth();
+function RegisterForm() {
+  const { register, acceptInvitation } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('invite');
   const [form, setForm] = useState({
     name: '',
     familyName: '',
@@ -28,7 +30,11 @@ export default function RegisterPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await register(form);
+      if (inviteToken) {
+        await acceptInvitation(inviteToken, form.name, form.password);
+      } else {
+        await register(form);
+      }
       router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao criar a conta.');
@@ -40,24 +46,32 @@ export default function RegisterPage() {
   return (
     <div className="auth-wrap">
       <Card className="auth-card">
-        <h1 className="auth-title">Criar conta</h1>
-        <p className="auth-sub">Comece a organizar as finanças da sua família.</p>
+        <h1 className="auth-title">{inviteToken ? 'Aceitar convite' : 'Criar conta'}</h1>
+        <p className="auth-sub">
+          {inviteToken
+            ? 'Você foi convidado para uma família. Informe seus dados para entrar.'
+            : 'Comece a organizar as finanças da sua família.'}
+        </p>
         <form onSubmit={onSubmit}>
           <Field label="Seu nome">
             <Input value={form.name} onChange={update('name')} required />
           </Field>
-          <Field label="Nome da família" hint="Será criada junto com a sua conta.">
-            <Input value={form.familyName} onChange={update('familyName')} required />
-          </Field>
-          <Field label="E-mail">
-            <Input
-              type="email"
-              autoComplete="email"
-              value={form.email}
-              onChange={update('email')}
-              required
-            />
-          </Field>
+          {!inviteToken ? (
+            <Field label="Nome da família" hint="Será criada junto com a sua conta.">
+              <Input value={form.familyName} onChange={update('familyName')} required />
+            </Field>
+          ) : null}
+          {!inviteToken ? (
+            <Field label="E-mail">
+              <Input
+                type="email"
+                autoComplete="email"
+                value={form.email}
+                onChange={update('email')}
+                required
+              />
+            </Field>
+          ) : null}
           <Field label="Senha" hint="Mínimo de 8 caracteres.">
             <Input
               type="password"
@@ -70,7 +84,7 @@ export default function RegisterPage() {
           </Field>
           {error ? <ErrorBox>{error}</ErrorBox> : null}
           <Button type="submit" className="btn-block" disabled={submitting}>
-            {submitting ? 'Criando…' : 'Criar conta'}
+            {submitting ? 'Criando…' : inviteToken ? 'Aceitar convite' : 'Criar conta'}
           </Button>
         </form>
         <p className="auth-alt">
@@ -78,5 +92,13 @@ export default function RegisterPage() {
         </p>
       </Card>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
   );
 }

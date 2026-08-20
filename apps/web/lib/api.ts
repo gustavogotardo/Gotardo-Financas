@@ -164,6 +164,36 @@ export type ImportRecord = {
   transactionCount: number;
 };
 
+export type FamilyMember = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  createdAt: string;
+};
+
+export type FamilyInvitation = {
+  id: string;
+  email: string;
+  role: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export type FamilyResponse = {
+  id: string;
+  name: string;
+  currency: string;
+  createdAt: string;
+  users: FamilyMember[];
+  invitations: FamilyInvitation[];
+};
+
+export type CreateInvitationInput = {
+  email: string;
+  role?: string;
+};
+
 export class ApiError extends Error {
   status: number;
 
