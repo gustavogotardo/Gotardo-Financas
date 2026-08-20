@@ -62,7 +62,7 @@ describe('Sugestão de categoria via ML (e2e)', () => {
             };
             const anomalies = (payload.transactions ?? []).map((tx) => {
               const value = Math.abs(Number(tx.amount));
-              const isAnomaly = value >= 5000;
+              const isAnomaly = Number(tx.amount) < 0 && value >= 5000;
               return {
                 id: tx.id,
                 isAnomaly,

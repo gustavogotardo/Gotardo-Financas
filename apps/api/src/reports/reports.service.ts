@@ -312,6 +312,7 @@ export class ReportsService {
         id: true,
         description: true,
         amount: true,
+        type: true,
         category: { select: { name: true } },
       },
     });
@@ -322,7 +323,7 @@ export class ReportsService {
       transactions.map((tx) => ({
         id: tx.id,
         description: tx.description,
-        amount: tx.amount.toString(),
+        amount: (tx.type === 'EXPENSE' ? -tx.amount : tx.amount).toString(),
         category: tx.category?.name ?? null,
       })),
     );
