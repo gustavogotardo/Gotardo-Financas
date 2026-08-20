@@ -123,6 +123,22 @@ Sequência até o alfa (após E0.5/E0.6):
   (regras PT-BR) e `/learn` por família (precedência + persistência em JSON);
   API grava `suggestedCategoryId` na criação manual e na importação (falha do
   ML não bloqueia); dashboard mostra "Sugerido: X" com botão "Aplicar". ✅
+- **P1 — Detecção de anomalias via ML**: `services/ml` com `POST /anomalies`
+  (despesa é anômala quando `|valor| >= 5×` a mediana da categoria — fallback
+  global — e `>= R$ 100`, mínimo 3 amostras; razão em PT-BR); API expõe
+  `GET /api/v1/reports/anomalies` por período com degradação graciosa quando o
+  ML está fora; dashboard marca a transação com badge "Anomalia" (motivo no
+  tooltip). ✅
+- **E1.2 — Relatórios no dashboard (web)**: seções de gastos por categoria e por
+  envelope (barras proporcionais) e extrato por conta com seleção de conta,
+  saldos de abertura/fechamento, receitas/despesas do período. ✅
+- **E1.3 — Painel da família (web)**: página `/familia` com membros, troca de
+  papéis (regras OWNER/ADMIN), convites (criar/revogar); registro aceita convite
+  via `?invite=<token>`. ✅
+- **E1.5 — PWA**: `manifest.webmanifest` (standalone, ícones 192/512 + maskable,
+  apple-touch-icon), service worker com shell pré-cacheado, API GET
+  network-first com fallback ao cache (chave por `Authorization`) e página
+  `/offline`. Instalável e navegação offline no dia a dia. ✅
 
 ### E0.5/E0.6 — Autenticação e isolamento por tenant
 
@@ -240,17 +256,25 @@ Critérios de aceite:
   transação e na importação de extratos, gravando `Transaction.suggestedCategoryId`
   (sugestão exibida no dashboard com botão "Aplicar"). Indisponibilidade do ML
   não bloqueia a operação (sugestão vira `null`).
-- **Detecção de anomalias** (gastos fora do padrão da família): pendente.
+- **Detecção de anomalias** (gastos fora do padrão da família): implementada
+  (`POST /anomalies`, ver P1 acima). ✅
 
 ### OCR (P3, adiado) — `services/ocr`
 
 - Somente texto embutido de PDF no MVP; escaneados exigem OCR local (PaddleOCR).
 - Esqueleto já existe; implementação apenas na Fase 3.
 
-### Pós-alfa (beta)
+### Beta (concluída)
 
-- **PWA avançado** (offline, instalação) e ajustes de UX.
-- Refinamento de relatórios e painel da família.
+Versão beta consolida a alfa para o uso real da família: relatórios e painel da
+família na web, categorização e detecção de anomalias via ML, e PWA
+(instalável, offline-first). Marco **BETA** concluído.
+
+- **E1.2** — Relatórios no dashboard (gastos por categoria/envelope + extrato por conta).
+- **E1.3** — Painel da família (membros, papéis, convites; registro por convite).
+- **E1.4** — Detecção de anomalias via ML (badge no dashboard).
+- **E1.5** — PWA (manifest, service worker, offline).
+- **E1.6** — Wrap-up: docs, deploy de produção e smoke final.
 
 ### Ambiente de teste (alfa on-prem)
 
