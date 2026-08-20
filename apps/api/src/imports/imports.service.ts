@@ -14,7 +14,7 @@ import type { AuthUser } from '../common/auth-user';
 import { CategorySuggesterService } from '../ml/category-suggester.service';
 import { PrismaService } from '../prisma/prisma.module';
 import { StorageService } from '../storage/storage.service';
-import { parseCsv } from './parsers/csv';
+import { parseCsv, decodeText } from './parsers/csv';
 import { parseOfx } from './parsers/ofx';
 import { normalizeDescription, type ParsedTransaction } from './parsers/types';
 
@@ -144,7 +144,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       const buffer = await this.storage.get(document.storageKey);
       const ext = extname(document.storageKey).replace('.', '').toLowerCase();
       const parsed =
-        ext === 'csv' ? parseCsv(buffer.toString('utf8')) : parseOfx(buffer.toString('utf8'));
+        ext === 'csv' ? parseCsv(decodeText(buffer)) : parseOfx(decodeText(buffer));
 
       const existing = await this.findExistingKeys(familyId, accountId);
       const toCreate = parsed.filter((tx) => !existing.has(this.txKey(tx)));

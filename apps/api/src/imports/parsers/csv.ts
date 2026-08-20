@@ -1,6 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import { normalizeDescription, typeFromAmount, type ParsedTransaction } from './types';
 
+export function decodeText(buffer: Buffer): string {
+  const utf8 = buffer.toString('utf8');
+  if (!utf8.includes('\uFFFD')) {
+    return utf8;
+  }
+  return buffer.toString('latin1');
+}
+
 function detectDelimiter(lines: string[]): string {
   const sample = lines.slice(0, 20).join('\n');
   const semicolons = (sample.match(/;/g) ?? []).length;
@@ -29,7 +37,7 @@ function splitLine(line: string, delim: string): string[] {
   return cells;
 }
 
-function parseBrDate(raw: string): string {
+function parseBrDate(raw: string): string | null {
   const value = raw.trim();
   const ddmmyyyy = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (ddmmyyyy) {
@@ -51,7 +59,7 @@ function parseBrDate(raw: string): string {
     const [, day, month, year] = ddmmyyyyLong;
     return `${year}-${month!.padStart(2, '0')}-${day!.padStart(2, '0')}`;
   }
-  return new Date().toISOString().slice(0, 10);
+  return null;
 }
 
 function parseAmount(raw: string): string {
@@ -121,7 +129,7 @@ function detectHeaderIndex(rows: string[][]): number {
 }
 
 export function parseCsv(content: string): ParsedTransaction[] {
-  const lines = content.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const lines = content.split(/\r\n|\r|\n/).filter((line) => line.trim().length > 0);
   if (lines.length === 0) {
     throw new BadRequestException('Arquivo CSV vazio');
   }
@@ -179,6 +187,10 @@ export function parseCsv(content: string): ParsedTransaction[] {
       continue;
     }
     const rawDate = row[dateCol] ?? '';
+    const date = parseBrDate(rawDate);
+    if (!date) {
+      continue;
+    }
     const description = normalizeDescription(row[descCol] ?? '') || 'Importação';
     let amount = parseAmount(pick.raw);
     if (pick.forceNegative && !amount.startsWith('-')) {
@@ -188,7 +200,7 @@ export function parseCsv(content: string): ParsedTransaction[] {
       continue;
     }
     transactions.push({
-      date: parseBrDate(rawDate),
+      date,
       description,
       amount,
       type: typeFromAmount(amount),

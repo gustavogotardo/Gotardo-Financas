@@ -32,7 +32,8 @@ const BRADESCO_CSV_SAMPLE = [
   '05/01/26; Resgate Inv Fac;5050404;"329,63";;"330,63";',
   '05/01/26; Rent.inv.facil;5050404;"0,04";;"330,67";',
   '06/01/26; Pagamento boleto;5050404;;"25,00";"305,67";',
-].join('\n');
+  ';Total;;"12.746,08";"-12.746,08";"1,00";',
+].join('\r');
 
 const OFX_SAMPLE = `OFXHEADER:100
 DATA:OFXSGML
@@ -162,7 +163,7 @@ describe('Importação de extratos (e2e)', () => {
       .post('/api/v1/imports')
       .set('Authorization', `Bearer ${tokens.accessToken}`)
       .field('accountId', accountId)
-      .attach('file', Buffer.from(BRADESCO_CSV_SAMPLE, 'utf8'), 'bradesco.csv');
+      .attach('file', Buffer.from(BRADESCO_CSV_SAMPLE, 'latin1'), 'bradesco.csv');
 
     expect(upload.status).toBe(201);
     const imported = upload.body as { id: string; status: string; transactionCount: number };
