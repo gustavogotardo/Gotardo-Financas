@@ -9,6 +9,7 @@ import {
   type CashflowResponse,
   type CategoryRecord,
   type EnvelopeRecord,
+  type ImportRecord,
   type PaymentMethodRow,
   type TransactionRecord,
 } from '@/lib/api';
@@ -25,6 +26,7 @@ import { AccountForm } from '@/components/account-form';
 import { AllocationForm } from '@/components/allocation-form';
 import { CategoryForm } from '@/components/category-form';
 import { EnvelopeForm } from '@/components/envelope-form';
+import { ImportForm, ImportRow } from '@/components/import-form';
 import { TransactionForm } from '@/components/transaction-form';
 
 const MONTH_FORMAT = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
@@ -33,6 +35,7 @@ type DashboardData = {
   accounts: AccountRecord[];
   categories: CategoryRecord[];
   envelopes: EnvelopeRecord[];
+  imports: ImportRecord[];
   cashflow: CashflowResponse;
   paymentMethods: PaymentMethodRow[];
   transactions: TransactionRecord[];
@@ -79,6 +82,7 @@ export default function DashboardPage() {
   const [showEnvelopeForm, setShowEnvelopeForm] = useState(false);
   const [editingEnvelope, setEditingEnvelope] = useState<EnvelopeRecord | null>(null);
   const [allocatingEnvelope, setAllocatingEnvelope] = useState<EnvelopeRecord | null>(null);
+  const [showImportForm, setShowImportForm] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -86,18 +90,19 @@ export default function DashboardPage() {
     setError(null);
     const range = monthRange(month);
     try {
-      const [accounts, categories, envelopes, cashflow, paymentMethods, transactions] =
+      const [accounts, categories, envelopes, imports, cashflow, paymentMethods, transactions] =
         await Promise.all([
           apiFetch<AccountRecord[]>('/api/v1/accounts'),
           apiFetch<CategoryRecord[]>('/api/v1/categories'),
           apiFetch<EnvelopeRecord[]>('/api/v1/envelopes'),
+          apiFetch<ImportRecord[]>('/api/v1/imports'),
           apiFetch<CashflowResponse>(`/api/v1/reports/cashflow?from=${range.from}&to=${range.to}`),
           apiFetch<PaymentMethodRow[]>(
             `/api/v1/reports/payment-methods?from=${range.from}&to=${range.to}`,
           ),
           apiFetch<TransactionRecord[]>('/api/v1/transactions'),
         ]);
-      setData({ accounts, categories, envelopes, cashflow, paymentMethods, transactions });
+      setData({ accounts, categories, envelopes, imports, cashflow, paymentMethods, transactions });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar os dados.');
     }
@@ -607,6 +612,53 @@ export default function DashboardPage() {
                           </tr>
                         );
                       })}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            </section>
+
+            <section className="section">
+              <div className="section-head">
+                <h2>Importar extratos</h2>
+                {canManage ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowImportForm((show) => !show)}
+                  >
+                    {showImportForm ? 'Fechar' : '+ Importar OFX/CSV'}
+                  </Button>
+                ) : null}
+              </div>
+              {showImportForm && data ? (
+                <ImportForm
+                  accounts={data.accounts}
+                  onCancel={() => setShowImportForm(false)}
+                  onDone={async () => {
+                    setShowImportForm(false);
+                    await load();
+                  }}
+                />
+              ) : null}
+              <Card>
+                {data.imports.length === 0 ? (
+                  <p className="empty">Nenhuma importação ainda.</p>
+                ) : (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Arquivo</th>
+                        <th>Data</th>
+                        <th className="td-num">Tamanho</th>
+                        <th className="td-num">Transações</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.imports.map((imported) => (
+                        <ImportRow key={imported.id} imported={imported} />
+                      ))}
                     </tbody>
                   </table>
                 )}

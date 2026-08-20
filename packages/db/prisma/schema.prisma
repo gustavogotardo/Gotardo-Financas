@@ -249,6 +249,7 @@ model Document {
   mimeType      String
   sizeBytes     Int
   status        DocumentStatus   @default(PENDING)
+  errorMessage  String?
   extractedText String?
   transactions  Transaction[]
   createdAt     DateTime         @default(now())

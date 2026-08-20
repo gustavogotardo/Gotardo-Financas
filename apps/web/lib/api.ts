@@ -119,6 +119,17 @@ export type CreateAllocationInput = {
   note?: string;
 };
 
+export type ImportRecord = {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: string;
+  errorMessage: string | null;
+  createdAt: string;
+  transactionCount: number;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -215,5 +226,38 @@ export async function apiFetch<T>(
   }
 
   if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  allowRetry = true,
+): Promise<T> {
+  const tokens = getTokens();
+  const headers: Record<string, string> = {};
+  if (tokens?.accessToken) {
+    headers.Authorization = `Bearer ${tokens.accessToken}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: formData });
+
+  if (res.status === 401 && allowRetry && tokens?.refreshToken) {
+    await refreshTokens();
+    return apiUpload<T>(path, formData, false);
+  }
+
+  if (!res.ok) {
+    let message = `Erro ${res.status}`;
+    try {
+      const body = (await res.json()) as { message?: string | string[] };
+      if (Array.isArray(body.message)) message = body.message.join('. ');
+      else if (body.message) message = body.message;
+    } catch {
+      // corpo sem JSON
+    }
+    throw new ApiError(res.status, message);
+  }
+
   return (await res.json()) as T;
 }

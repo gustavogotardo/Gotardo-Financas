@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
+import { StorageModule } from './storage/storage.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { FamilyModule } from './family/family.module';
@@ -11,6 +12,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { EnvelopesModule } from './envelopes/envelopes.module';
 import { ReportsModule } from './reports/reports.module';
+import { ImportsModule } from './imports/imports.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -19,6 +21,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
+    StorageModule,
     HealthModule,
     AuthModule,
     FamilyModule,
@@ -27,6 +30,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     TransactionsModule,
     EnvelopesModule,
     ReportsModule,
+    ImportsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
