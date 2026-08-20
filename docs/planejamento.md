@@ -71,8 +71,8 @@ Sequência até o alfa (após E0.5/E0.6):
 5. **E0.11** — relatórios básicos (fluxo de caixa, por categoria, por envelope).
 6. **E0.12** — deploy de produção (Compose on-prem, HTTPS, backups, `migrate deploy`).
 
-> **E0.7 (fila/async)** fica opcional para o alfa — entra antes apenas se a
-> importação de extratos for priorizada antes do deploy.
+> **E0.7 (fila/async)** foi implementada para a importação de extratos
+> (BullMQ opcional via `REDIS_URL`); OCR e categorização via ML ficam para P1/P3.
 
 ### Concluídas
 
@@ -114,6 +114,11 @@ Sequência até o alfa (após E0.5/E0.6):
   validação por enum nos DTOs, endpoint de agregação por método e período
   (incluindo transações "sem método") com isolamento por tenant, e dashboard com
   seções por forma de pagamento, subtotais do período e navegação por mês. ✅
+- **E0.7 — Fila/async + importação de extratos**: BullMQ + Redis (fila opcional
+  via `REDIS_URL`, fallback inline), `StorageService` (MinIO ou pasta local),
+  upload de OFX/QFX/CSV com criação de transações `PENDING`/`source IMPORT`,
+  dedup por FITID ou data+valor+descrição, `Document` com `errorMessage`.
+  Coberto no dashboard: seção "Importar extratos" (upload + lista com status). ✅
 
 ### E0.5/E0.6 — Autenticação e isolamento por tenant
 
@@ -147,12 +152,16 @@ Critérios de aceite:
 Dependências: nova lib de auth (ex.: `@nestjs/jwt`, `argon2`, `@nestjs/throttler`),
 campos já presentes em `User` (passwordHash, role, familyId).
 
-### E0.7 — Fila/async (Redis + BullMQ)
+### E0.7 — Fila/async (Redis + BullMQ) ✅
 
-- Integração BullMQ com Redis (já provisionado).
-- Enfileirar jobs: importação de extrato, OCR, categorização via ML.
-- Retries, backoff e dashboard (Bull Board) em dev.
-- **Opcional para o alfa** — só entra antes do deploy se a importação for priorizada.
+- BullMQ + Redis provisionados; fila **opcional** (ativa se `REDIS_URL` presente,
+  senão processa inline — e2e roda sem Redis).
+- **Importação de extratos OFX/QFX/CSV** (implementada): upload multipart
+  (`POST /api/v1/imports`, OWNER/ADMIN), armazenamento no MinIO (`Document`),
+  parse e criação de transações `PENDING` com `source IMPORT`, dedup por FITID
+  ou data+valor+descrição, status `PROCESSED`/`FAILED` + `errorMessage`.
+- Retries/backoff e Bull Board em dev: ainda não implementados.
+- OCR e categorização via ML: **não** entram no alfa (ver P1/P3).
 
 ### E0.8 — Contas e categorias
 
@@ -231,7 +240,6 @@ Critérios de aceite:
 
 ### Pós-alfa (beta)
 
-- **Importação de extratos** (OFX/CSV) e integração com MinIO (`Document`), via fila.
 - **PWA avançado** (offline, instalação) e ajustes de UX.
 - Refinamento de relatórios e painel da família.
 
