@@ -51,6 +51,14 @@ a:hover {
   padding: 0 1.25rem;
 }
 
+.center {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
