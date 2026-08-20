@@ -15,7 +15,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from .rules import normalize, suggest_with_rules
+from .rules import detect_anomalies, normalize, suggest_with_rules
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 LEARNED_FILE = DATA_DIR / "learned.json"
@@ -74,6 +74,27 @@ class LearnResponse(BaseModel):
     stored: int
 
 
+class AnomalyItem(BaseModel):
+    id: str
+    description: str
+    amount: str
+    category: str | None = None
+
+
+class AnomaliesRequest(BaseModel):
+    transactions: list[AnomalyItem]
+
+
+class AnomalyResult(BaseModel):
+    id: str
+    isAnomaly: bool
+    reason: str | None = None
+
+
+class AnomaliesResponse(BaseModel):
+    anomalies: list[AnomalyResult]
+
+
 @app.get("/health")
 def health() -> dict[str, object]:
     return {"status": "ok", "service": "gotardo-ml", "version": "0.2.0"}
@@ -95,3 +116,15 @@ def learn(payload: LearnRequest) -> LearnResponse:
         stored = len(family_rules)
         _save()
     return LearnResponse(ok=True, stored=stored)
+
+
+@app.post("/anomalies", response_model=AnomaliesResponse)
+def anomalies(payload: AnomaliesRequest) -> AnomaliesResponse:
+    items = [
+        {"id": tx.id, "amount": float(tx.amount), "category": tx.category}
+        for tx in payload.transactions
+    ]
+    flagged = detect_anomalies(items)
+    return AnomaliesResponse(
+        anomalies=[AnomalyResult(id=tx.id, **flagged[tx.id]) for tx in payload.transactions]
+    )

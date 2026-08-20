@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PaymentMethod, Prisma, TransactionStatus, TransactionType } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
+import { MlClient } from '../ml/ml.client';
 import type { AuthUser } from '../common/auth-user';
 
 export type PaymentMethodRow = {
@@ -70,6 +71,12 @@ export type AccountStatement = {
   transactions: AccountStatementTransaction[];
 };
 
+export type AnomalyRow = {
+  transactionId: string;
+  isAnomaly: boolean;
+  reason: string | null;
+};
+
 type CashflowRow = {
   month: string;
   income: Prisma.Decimal;
@@ -80,7 +87,10 @@ const CONFIRMED = TransactionStatus.CONFIRMED;
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ml: MlClient,
+  ) {}
 
   async cashflow(user: AuthUser, from?: Date, to?: Date): Promise<CashflowResponse> {
     const rows = await this.prisma.$queryRaw<CashflowRow[]>(
@@ -287,6 +297,43 @@ export class ReportsService {
         category: tx.category,
       })),
     };
+  }
+
+  async anomalies(user: AuthUser, from?: Date, to?: Date): Promise<AnomalyRow[]> {
+    const transactions = await this.prisma.transaction.findMany({
+      where: {
+        familyId: user.familyId,
+        deletedAt: null,
+        status: CONFIRMED,
+        ...this.dateFilter(from, to),
+      },
+      orderBy: { date: 'asc' },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        category: { select: { name: true } },
+      },
+    });
+    if (transactions.length === 0) {
+      return [];
+    }
+    const flags = await this.ml.anomalies(
+      transactions.map((tx) => ({
+        id: tx.id,
+        description: tx.description,
+        amount: tx.amount.toString(),
+        category: tx.category?.name ?? null,
+      })),
+    );
+    return transactions.map((tx) => {
+      const flag = flags.get(tx.id);
+      return {
+        transactionId: tx.id,
+        isAnomaly: flag?.isAnomaly ?? false,
+        reason: flag?.reason ?? null,
+      };
+    });
   }
 
   private expenseWhere(user: AuthUser, from?: Date, to?: Date): Prisma.TransactionWhereInput {

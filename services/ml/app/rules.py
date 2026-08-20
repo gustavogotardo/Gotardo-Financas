@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+import statistics
 import unicodedata
+from collections import defaultdict
 
 _PUNCT_RE = re.compile(r"[^\w\s]+")
 _WS_RE = re.compile(r"\s+")
@@ -154,3 +156,50 @@ def suggest_with_rules(
                 return category, 0.8, keyword
 
     return None, 0.0, None
+
+
+ANOMALY_FACTOR = 5.0
+MIN_ANOMALY_VALUE = 100.0
+MIN_SAMPLES = 3
+
+
+def detect_anomalies(items: list[dict]) -> dict[str, dict]:
+    """Identifica despesas anômalas dentro de uma lista de transações.
+
+    `items` é uma lista de dicionários com `id`, `amount` (negativo p/ despesa)
+    e `category` (opcional). Usa a mediana por categoria (fallback: mediana
+    global); uma despesa é anômala quando |valor| >= 5x a mediana do grupo e
+    >= `MIN_ANOMALY_VALUE`. Com menos de 3 despesas não há estatística
+    suficiente e nada é sinalizado.
+    """
+    result: dict[str, dict] = {item["id"]: {"isAnomaly": False, "reason": None} for item in items}
+    expenses = [item for item in items if float(item["amount"]) < 0]
+    if len(expenses) < MIN_SAMPLES:
+        return result
+
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for item in expenses:
+        groups[item.get("category") or ""].append(item)
+
+    global_median = statistics.median(abs(float(item["amount"])) for item in expenses)
+
+    for group in groups.values():
+        median = (
+            statistics.median(abs(float(item["amount"])) for item in group)
+            if len(group) >= MIN_SAMPLES
+            else global_median
+        )
+        if median <= 0:
+            continue
+        threshold = max(median * ANOMALY_FACTOR, MIN_ANOMALY_VALUE)
+        for item in group:
+            value = abs(float(item["amount"]))
+            if value >= threshold and value >= MIN_ANOMALY_VALUE:
+                result[item["id"]] = {
+                    "isAnomaly": True,
+                    "reason": (
+                        f"Valor {value:.2f} é {value / median:.1f}x a mediana "
+                        f"do grupo ({median:.2f})"
+                    ),
+                }
+    return result

@@ -96,6 +96,12 @@ export type AccountStatement = {
   transactions: AccountStatementTransaction[];
 };
 
+export type AnomalyRow = {
+  transactionId: string;
+  isAnomaly: boolean;
+  reason: string | null;
+};
+
 export type CreateTransactionInput = {
   description: string;
   amount: number;

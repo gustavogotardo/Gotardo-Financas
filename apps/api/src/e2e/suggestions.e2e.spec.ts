@@ -13,6 +13,7 @@ import { CategoriesModule } from '../categories/categories.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { ImportsModule } from '../imports/imports.module';
 import { StorageModule } from '../storage/storage.module';
+import { ReportsModule } from '../reports/reports.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -54,6 +55,28 @@ describe('Sugestão de categoria via ML (e2e)', () => {
         body += chunk.toString();
       });
       req.on('end', () => {
+        if (req.url?.includes('/anomalies')) {
+          try {
+            const payload = JSON.parse(body) as {
+              transactions?: Array<{ id: string; amount: string }>;
+            };
+            const anomalies = (payload.transactions ?? []).map((tx) => {
+              const value = Math.abs(Number(tx.amount));
+              const isAnomaly = value >= 5000;
+              return {
+                id: tx.id,
+                isAnomaly,
+                reason: isAnomaly ? `Valor ${value} muito acima do padrão` : null,
+              };
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ anomalies }));
+          } catch {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ anomalies: [] }));
+          }
+          return;
+        }
         let category: string | null = null;
         try {
           const payload = JSON.parse(body) as { description?: string };
@@ -92,6 +115,7 @@ describe('Sugestão de categoria via ML (e2e)', () => {
         TransactionsModule,
         ImportsModule,
         StorageModule,
+        ReportsModule,
       ],
       providers: [
         { provide: APP_GUARD, useClass: JwtAuthGuard },
@@ -210,5 +234,53 @@ describe('Sugestão de categoria via ML (e2e)', () => {
       include: { suggestedCategory: { select: { name: true } } },
     });
     expect(tx?.suggestedCategory?.name).toBe('Alimentação');
+  });
+
+  it('marca transações anômalas via relatório', async () => {
+    const email = `suganom-${suffix}@${domain}`;
+    const reg = await register('SugAnom', email, `Família SugAnom ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    const family = (meRes.body as { familyId: string }).familyId;
+    createdFamilies.push(family);
+
+    const account = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .send({ name: 'Conta Anom', type: 'CHECKING' });
+    const accountId = (account.body as { id: string }).id;
+
+    const create = (description: string, amount: number) =>
+      request(app.getHttpServer())
+        .post('/api/v1/transactions')
+        .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .send({
+          accountId,
+          description,
+          amount,
+          type: 'EXPENSE',
+          status: 'CONFIRMED',
+          date: '2026-08-15T12:00:00.000Z',
+        });
+
+    const rows: Array<[string, number]> = [
+      ['Mercado', 120],
+      ['Mercado', 130],
+      ['Mercado', 110],
+      ['Mercado', 125],
+      ['Compra grande', 50000],
+    ];
+    for (const [desc, amount] of rows) {
+      const res = await create(desc, amount);
+      expect(res.status).toBe(201);
+    }
+
+    const report = await request(app.getHttpServer())
+      .get('/api/v1/reports/anomalies?from=2026-08-01&to=2026-08-31')
+      .set('Authorization', `Bearer ${tokens.accessToken}`);
+
+    expect(report.status).toBe(200);
+    const flagged = (report.body as Array<{ isAnomaly: boolean }>).filter((row) => row.isAnomaly);
+    expect(flagged).toHaveLength(1);
   });
 });

@@ -7,6 +7,18 @@ export type MlSuggestion = {
   matched: string | null;
 };
 
+export type MlAnomalyInput = {
+  id: string;
+  description: string;
+  amount: string;
+  category?: string | null;
+};
+
+export type MlAnomalyFlag = {
+  isAnomaly: boolean;
+  reason: string | null;
+};
+
 @Injectable()
 export class MlClient {
   private readonly logger = new Logger(MlClient.name);
@@ -54,6 +66,39 @@ export class MlClient {
         `ML indisponível em ${this.baseUrl}: ${error instanceof Error ? error.message : 'erro'}`,
       );
       return { category: null, confidence: 0, matched: null };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async anomalies(
+    transactions: MlAnomalyInput[],
+  ): Promise<Map<string, MlAnomalyFlag>> {
+    if (!this.baseUrl) {
+      return new Map();
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const res = await fetch(`${this.baseUrl}/anomalies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        this.logger.warn(`ML respondeu ${res.status} em /anomalies`);
+        return new Map();
+      }
+      const body = (await res.json()) as {
+        anomalies?: Array<MlAnomalyFlag & { id: string }>;
+      };
+      return new Map((body.anomalies ?? []).map((row) => [row.id, { isAnomaly: row.isAnomaly, reason: row.reason }]));
+    } catch (error) {
+      this.logger.warn(
+        `ML indisponível em ${this.baseUrl}: ${error instanceof Error ? error.message : 'erro'}`,
+      );
+      return new Map();
     } finally {
       clearTimeout(timeout);
     }

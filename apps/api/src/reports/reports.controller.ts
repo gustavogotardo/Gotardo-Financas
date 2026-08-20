@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import {
   ReportsService,
   type AccountStatement,
+  type AnomalyRow,
   type CashflowResponse,
   type CategoryExpenseRow,
   type EnvelopeExpenseRow,
@@ -45,6 +46,14 @@ export class ReportsController {
     @Query() query: ReportRangeDto,
   ): Promise<PaymentMethodRow[]> {
     return this.reports.paymentMethods(user, query.from, query.to);
+  }
+
+  @Get('anomalies')
+  anomalies(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ReportRangeDto,
+  ): Promise<AnomalyRow[]> {
+    return this.reports.anomalies(user, query.from, query.to);
   }
 
   @Get('account-statement/:accountId')

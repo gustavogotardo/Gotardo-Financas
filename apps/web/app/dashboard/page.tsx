@@ -7,6 +7,7 @@ import {
   apiFetch,
   type AccountRecord,
   type AccountStatement,
+  type AnomalyRow,
   type CashflowResponse,
   type CategoryExpenseRow,
   type CategoryRecord,
@@ -44,6 +45,7 @@ type DashboardData = {
   expensesByCategory: CategoryExpenseRow[];
   expensesByEnvelope: EnvelopeExpenseRow[];
   accountStatement: AccountStatement | null;
+  anomalies: AnomalyRow[];
   transactions: TransactionRecord[];
 };
 
@@ -108,6 +110,7 @@ export default function DashboardPage() {
         paymentMethods,
         expensesByCategory,
         expensesByEnvelope,
+        anomalies,
         accountStatement,
         transactions,
       ] = await Promise.all([
@@ -124,6 +127,7 @@ export default function DashboardPage() {
         apiFetch<EnvelopeExpenseRow[]>(
           `/api/v1/reports/expenses-by-envelope?from=${range.from}&to=${range.to}`,
         ),
+        apiFetch<AnomalyRow[]>(`/api/v1/reports/anomalies?from=${range.from}&to=${range.to}`),
         accountId
           ? apiFetch<AccountStatement>(
               `/api/v1/reports/account-statement/${accountId}?from=${range.from}&to=${range.to}`,
@@ -141,6 +145,7 @@ export default function DashboardPage() {
         expensesByCategory,
         expensesByEnvelope,
         accountStatement,
+        anomalies,
         transactions,
       });
     } catch (err) {
@@ -165,6 +170,14 @@ export default function DashboardPage() {
   const range = monthRange(month);
   const rangeStart = useMemo(() => new Date(`${range.from}T00:00:00`), [range.from]);
   const rangeEnd = useMemo(() => new Date(`${range.to}T23:59:59.999`), [range.to]);
+
+  const anomalyById = useMemo(() => {
+    const map = new Map<string, AnomalyRow>();
+    for (const row of data?.anomalies ?? []) {
+      if (row.isAnomaly) map.set(row.transactionId, row);
+    }
+    return map;
+  }, [data]);
 
   const monthTransactions = useMemo(
     () => (data?.transactions ?? []).filter((tx) => inRange(tx.date, rangeStart, rangeEnd)),
@@ -938,6 +951,11 @@ export default function DashboardPage() {
                               <td className="muted">{tx.account?.name ?? '—'}</td>
                               <td>
                                 <Badge tone={statusTone(tx.status)}>{statusLabel(tx.status)}</Badge>
+                                {anomalyById.has(tx.id) ? (
+                                  <span title={anomalyById.get(tx.id)?.reason ?? undefined}>
+                                    <Badge tone="danger">Anomalia</Badge>
+                                  </span>
+                                ) : null}
                               </td>
                               <td className={`td-num ${positive ? 'td-pos' : 'td-neg'}`}>
                                 {positive ? '+' : '−'}
