@@ -439,6 +439,43 @@ a:hover {
   font-weight: 600;
 }
 
+.report-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.report-bar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'label value'
+    'bar bar';
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.report-bar .progress {
+  grid-area: bar;
+  margin: 0;
+}
+
+.report-bar-label {
+  grid-area: label;
+  font-weight: 600;
+}
+
+.report-bar-value {
+  grid-area: value;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-fill-danger {
+  background: var(--danger, #e5484d);
+}
+
 .empty {
   color: var(--muted);
   font-size: 0.9rem;

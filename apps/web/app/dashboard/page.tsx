@@ -6,8 +6,11 @@ import { useAuth } from '@/lib/auth';
 import {
   apiFetch,
   type AccountRecord,
+  type AccountStatement,
   type CashflowResponse,
+  type CategoryExpenseRow,
   type CategoryRecord,
+  type EnvelopeExpenseRow,
   type EnvelopeRecord,
   type ImportRecord,
   type PaymentMethodRow,
@@ -21,7 +24,7 @@ import {
   paymentMethodLabel,
   statusLabel,
 } from '@/lib/format';
-import { Badge, Button, Card, ErrorBox, Spinner, StatCard } from '@/components/ui';
+import { Badge, Button, Card, ErrorBox, Select, Spinner, StatCard } from '@/components/ui';
 import { AccountForm } from '@/components/account-form';
 import { AllocationForm } from '@/components/allocation-form';
 import { CategoryForm } from '@/components/category-form';
@@ -38,6 +41,9 @@ type DashboardData = {
   imports: ImportRecord[];
   cashflow: CashflowResponse;
   paymentMethods: PaymentMethodRow[];
+  expensesByCategory: CategoryExpenseRow[];
+  expensesByEnvelope: EnvelopeExpenseRow[];
+  accountStatement: AccountStatement | null;
   transactions: TransactionRecord[];
 };
 
@@ -83,6 +89,7 @@ export default function DashboardPage() {
   const [editingEnvelope, setEditingEnvelope] = useState<EnvelopeRecord | null>(null);
   const [allocatingEnvelope, setAllocatingEnvelope] = useState<EnvelopeRecord | null>(null);
   const [showImportForm, setShowImportForm] = useState(false);
+  const [statementAccountId, setStatementAccountId] = useState<string>('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -91,27 +98,65 @@ export default function DashboardPage() {
     setError(null);
     const range = monthRange(month);
     try {
-      const [accounts, categories, envelopes, imports, cashflow, paymentMethods, transactions] =
-        await Promise.all([
-          apiFetch<AccountRecord[]>('/api/v1/accounts'),
-          apiFetch<CategoryRecord[]>('/api/v1/categories'),
-          apiFetch<EnvelopeRecord[]>('/api/v1/envelopes'),
-          apiFetch<ImportRecord[]>('/api/v1/imports'),
-          apiFetch<CashflowResponse>(`/api/v1/reports/cashflow?from=${range.from}&to=${range.to}`),
-          apiFetch<PaymentMethodRow[]>(
-            `/api/v1/reports/payment-methods?from=${range.from}&to=${range.to}`,
-          ),
-          apiFetch<TransactionRecord[]>('/api/v1/transactions'),
-        ]);
-      setData({ accounts, categories, envelopes, imports, cashflow, paymentMethods, transactions });
+      const accounts = await apiFetch<AccountRecord[]>('/api/v1/accounts');
+      const accountId = statementAccountId || accounts[0]?.id || '';
+      const [
+        categories,
+        envelopes,
+        imports,
+        cashflow,
+        paymentMethods,
+        expensesByCategory,
+        expensesByEnvelope,
+        accountStatement,
+        transactions,
+      ] = await Promise.all([
+        apiFetch<CategoryRecord[]>('/api/v1/categories'),
+        apiFetch<EnvelopeRecord[]>('/api/v1/envelopes'),
+        apiFetch<ImportRecord[]>('/api/v1/imports'),
+        apiFetch<CashflowResponse>(`/api/v1/reports/cashflow?from=${range.from}&to=${range.to}`),
+        apiFetch<PaymentMethodRow[]>(
+          `/api/v1/reports/payment-methods?from=${range.from}&to=${range.to}`,
+        ),
+        apiFetch<CategoryExpenseRow[]>(
+          `/api/v1/reports/expenses-by-category?from=${range.from}&to=${range.to}`,
+        ),
+        apiFetch<EnvelopeExpenseRow[]>(
+          `/api/v1/reports/expenses-by-envelope?from=${range.from}&to=${range.to}`,
+        ),
+        accountId
+          ? apiFetch<AccountStatement>(
+              `/api/v1/reports/account-statement/${accountId}?from=${range.from}&to=${range.to}`,
+            )
+          : Promise.resolve(null),
+        apiFetch<TransactionRecord[]>('/api/v1/transactions'),
+      ]);
+      setData({
+        accounts,
+        categories,
+        envelopes,
+        imports,
+        cashflow,
+        paymentMethods,
+        expensesByCategory,
+        expensesByEnvelope,
+        accountStatement,
+        transactions,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar os dados.');
     }
-  }, [month]);
+  }, [month, statementAccountId]);
 
   useEffect(() => {
     if (user) void load();
   }, [user, load]);
+
+  useEffect(() => {
+    if (!statementAccountId && data && data.accounts.length > 0) {
+      setStatementAccountId(data.accounts[0]?.id ?? '');
+    }
+  }, [data, statementAccountId]);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -701,6 +746,145 @@ export default function DashboardPage() {
                   ))}
                 </div>
               )}
+            </section>
+
+            <section className="section">
+              <div className="section-head">
+                <h2>Gastos por categoria</h2>
+              </div>
+              <Card>
+                {data.expensesByCategory.length === 0 ? (
+                  <p className="empty">Nenhum gasto confirmado neste mês.</p>
+                ) : (
+                  <div className="report-bars">
+                    {data.expensesByCategory.map((row) => (
+                      <div className="report-bar" key={row.categoryId ?? 'none'}>
+                        <span className="report-bar-label">{row.categoryName}</span>
+                        <div className="progress">
+                          <span
+                            className="progress-fill progress-fill-danger"
+                            style={{
+                              width: `${(Number(row.total) / Number(data.expensesByCategory[0]?.total ?? 1)) * 100}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="report-bar-value">{brl(row.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </section>
+
+            <section className="section">
+              <div className="section-head">
+                <h2>Gastos por envelope</h2>
+              </div>
+              <Card>
+                {data.expensesByEnvelope.length === 0 ? (
+                  <p className="empty">Nenhum gasto em envelopes neste mês.</p>
+                ) : (
+                  <div className="report-bars">
+                    {data.expensesByEnvelope.map((row) => (
+                      <div className="report-bar" key={row.envelopeId ?? 'none'}>
+                        <span className="report-bar-label">{row.envelopeName}</span>
+                        <div className="progress">
+                          <span
+                            className="progress-fill progress-fill-danger"
+                            style={{
+                              width: `${(Number(row.total) / Number(data.expensesByEnvelope[0]?.total ?? 1)) * 100}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="report-bar-value">{brl(row.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </section>
+
+            <section className="section">
+              <div className="section-head">
+                <h2>Extrato por conta</h2>
+                {data.accounts.length > 1 ? (
+                  <Select
+                    value={statementAccountId}
+                    onChange={(e) => setStatementAccountId(e.target.value)}
+                  >
+                    {data.accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </Select>
+                ) : null}
+              </div>
+              {data.accountStatement ? (
+                <Card>
+                  <div className="stat-grid">
+                    <StatCard
+                      label="Saldo inicial"
+                      value={brl(data.accountStatement.openingBalance)}
+                    />
+                    <StatCard
+                      label="Entradas"
+                      value={brl(data.accountStatement.income)}
+                      tone="success"
+                    />
+                    <StatCard
+                      label="Saídas"
+                      value={brl(data.accountStatement.expense)}
+                      tone="danger"
+                    />
+                    <StatCard
+                      label="Saldo final"
+                      value={brl(data.accountStatement.closingBalance)}
+                      tone={
+                        Number(data.accountStatement.closingBalance) >= 0 ? 'success' : 'danger'
+                      }
+                    />
+                  </div>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Descrição</th>
+                        <th>Categoria</th>
+                        <th>Status</th>
+                        <th className="td-num">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.accountStatement.transactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="muted">
+                            Nenhuma transação confirmada neste período.
+                          </td>
+                        </tr>
+                      ) : (
+                        data.accountStatement.transactions.map((tx) => {
+                          const positive = tx.type === 'INCOME';
+                          return (
+                            <tr key={tx.id}>
+                              <td>{formatDate(tx.date)}</td>
+                              <td>{tx.description}</td>
+                              <td>{tx.category?.name ?? '—'}</td>
+                              <td>
+                                <Badge tone={statusTone(tx.status)}>{statusLabel(tx.status)}</Badge>
+                              </td>
+                              <td className={`td-num ${positive ? 'td-pos' : 'td-neg'}`}>
+                                {positive ? '+' : '−'}
+                                {brl(tx.amount)}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </Card>
+              ) : null}
             </section>
 
             <section className="section">

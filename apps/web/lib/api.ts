@@ -63,6 +63,39 @@ export type PaymentMethodRow = {
   count: number;
 };
 
+export type CategoryExpenseRow = {
+  categoryId: string | null;
+  categoryName: string;
+  total: string;
+};
+
+export type EnvelopeExpenseRow = {
+  envelopeId: string | null;
+  envelopeName: string;
+  total: string;
+};
+
+export type AccountStatementTransaction = {
+  id: string;
+  date: string;
+  description: string;
+  amount: string;
+  type: string;
+  status: string;
+  category: { id: string; name: string } | null;
+};
+
+export type AccountStatement = {
+  account: { id: string; name: string; currency: string };
+  from: string | null;
+  to: string | null;
+  openingBalance: string;
+  closingBalance: string;
+  income: string;
+  expense: string;
+  transactions: AccountStatementTransaction[];
+};
+
 export type CreateTransactionInput = {
   description: string;
   amount: number;
