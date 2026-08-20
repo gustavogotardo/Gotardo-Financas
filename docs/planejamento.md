@@ -119,6 +119,10 @@ Sequência até o alfa (após E0.5/E0.6):
   upload de OFX/QFX/CSV com criação de transações `PENDING`/`source IMPORT`,
   dedup por FITID ou data+valor+descrição, `Document` com `errorMessage`.
   Coberto no dashboard: seção "Importar extratos" (upload + lista com status). ✅
+- **P1 — Categorização automática via ML (MVP)**: `services/ml` com `/categorize`
+  (regras PT-BR) e `/learn` por família (precedência + persistência em JSON);
+  API grava `suggestedCategoryId` na criação manual e na importação (falha do
+  ML não bloqueia); dashboard mostra "Sugerido: X" com botão "Aplicar". ✅
 
 ### E0.5/E0.6 — Autenticação e isolamento por tenant
 
@@ -229,9 +233,14 @@ Critérios de aceite:
 
 ### Serviços ML (P1) — `services/ml`
 
-- Categorização automática de transações (aprendizado por padrões + regras).
-- Detecção de anomalias (gastos fora do padrão da família).
-- Exposição via FastAPI; consumo pela API através de fila.
+- **Categorização automática** (MVP implementado): `services/ml` expõe
+  `POST /categorize` com regras em português-BR e precedência de aprendizado por
+  família (`POST /learn`, persistido em JSON via volume `ml-data`/`DATA_DIR`).
+- A API consome o serviço (client resiliente, `ML_URL`) na criação manual de
+  transação e na importação de extratos, gravando `Transaction.suggestedCategoryId`
+  (sugestão exibida no dashboard com botão "Aplicar"). Indisponibilidade do ML
+  não bloqueia a operação (sugestão vira `null`).
+- **Detecção de anomalias** (gastos fora do padrão da família): pendente.
 
 ### OCR (P3, adiado) — `services/ocr`
 
