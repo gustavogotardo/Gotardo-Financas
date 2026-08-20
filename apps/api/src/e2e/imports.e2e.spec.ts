@@ -25,6 +25,15 @@ const CSV_SAMPLE = [
   '10/08/2026;MERCADO;-120,30',
 ].join('\n');
 
+const BRADESCO_CSV_SAMPLE = [
+  'Extrato de: Ag: 1234 | Conta: 123456-7 | Entre 01/01/2026 e 31/01/2026',
+  'Data;Histórico;Docto.;Crédito (R$);Débito (R$);Saldo (R$);',
+  '30/12/25;SALDO ANTERIOR;;;;"1,00";',
+  '05/01/26; Resgate Inv Fac;5050404;"329,63";;"330,63";',
+  '05/01/26; Rent.inv.facil;5050404;"0,04";;"330,67";',
+  '06/01/26; Pagamento boleto;5050404;;"25,00";"305,67";',
+].join('\n');
+
 const OFX_SAMPLE = `OFXHEADER:100
 DATA:OFXSGML
 VERSION:102
@@ -136,6 +145,38 @@ describe('Importação de extratos (e2e)', () => {
     expect(transactions.every((tx) => tx.source === 'IMPORT')).toBe(true);
     const salario = transactions.find((tx) => tx.description === 'salario');
     expect(salario?.amount.toString()).toBe('3250');
+  });
+
+  it('importa CSV do Bradesco (colunas crédito/débito, ano 2 dígitos)', async () => {
+    const email = emailFor('imp-bradesco');
+    const reg = await register('Imp Bradesco', email, `Família Imp Bradesco ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    const family = (meRes.body as MeResponse).familyId;
+    createdFamilies.push(family);
+
+    const account = await createAccount(tokens.accessToken, 'Conta Bradesco');
+    const accountId = (account.body as { id: string }).id;
+
+    const upload = await request(app.getHttpServer())
+      .post('/api/v1/imports')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .field('accountId', accountId)
+      .attach('file', Buffer.from(BRADESCO_CSV_SAMPLE, 'utf8'), 'bradesco.csv');
+
+    expect(upload.status).toBe(201);
+    const imported = upload.body as { id: string; status: string; transactionCount: number };
+    expect(imported.status).toBe('PROCESSED');
+    expect(imported.transactionCount).toBe(3);
+
+    const transactions = await prisma.transaction.findMany({ where: { documentId: imported.id } });
+    const resgate = transactions.find((tx) => tx.description === 'resgate inv fac');
+    const boleto = transactions.find((tx) => tx.description === 'pagamento boleto');
+    expect(resgate?.amount.toString()).toBe('329.63');
+    expect(resgate?.type).toBe('INCOME');
+    expect(resgate?.date.toISOString().slice(0, 10)).toBe('2026-01-05');
+    expect(boleto?.amount.toString()).toBe('-25');
+    expect(boleto?.type).toBe('EXPENSE');
   });
 
   it('deduplica ao importar o mesmo CSV de novo', async () => {

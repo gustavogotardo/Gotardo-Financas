@@ -36,6 +36,12 @@ function parseBrDate(raw: string): string {
     const [, day, month, year] = ddmmyyyy;
     return `${year}-${month!.padStart(2, '0')}-${day!.padStart(2, '0')}`;
   }
+  const ddmmyy = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/);
+  if (ddmmyy) {
+    const [, day, month, shortYear] = ddmmyy;
+    const year = Number(shortYear) < 70 ? `20${shortYear}` : `19${shortYear}`;
+    return `${year}-${month!.padStart(2, '0')}-${day!.padStart(2, '0')}`;
+  }
   const yyyymmdd = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (yyyymmdd) {
     return value;
@@ -85,6 +91,22 @@ function findColumn(headers: string[], patterns: RegExp[]): number {
   return index;
 }
 
+function pickAmount(
+  row: string[],
+  amountCol: number,
+  creditCol: number,
+  debitCol: number,
+): { raw: string; forceNegative: boolean } | null {
+  const nonEmpty = (value: string | undefined): string | null =>
+    value !== undefined && value.trim() !== '' ? value : null;
+  const credit = creditCol >= 0 ? nonEmpty(row[creditCol]) : null;
+  const debit = debitCol >= 0 ? nonEmpty(row[debitCol]) : null;
+  if (credit) return { raw: credit, forceNegative: false };
+  if (debit) return { raw: debit, forceNegative: true };
+  const fallback = amountCol >= 0 ? nonEmpty(row[amountCol]) : null;
+  return fallback ? { raw: fallback, forceNegative: false } : null;
+}
+
 function detectHeaderIndex(rows: string[][]): number {
   for (let i = 0; i < Math.min(rows.length, 10); i += 1) {
     const line = (rows[i] ?? []).join(' ');
@@ -110,6 +132,8 @@ export function parseCsv(content: string): ParsedTransaction[] {
   let dateCol = 0;
   let descCol = 1;
   let amountCol = -1;
+  let creditCol = -1;
+  let debitCol = -1;
 
   if (headerIndex >= 0) {
     const headers = rows[headerIndex] ?? [];
@@ -124,7 +148,22 @@ export function parseCsv(content: string): ParsedTransaction[] {
       /beneficiario/,
       /texto/,
     ]);
-    amountCol = amountMatch >= 0 ? amountMatch : headers.length - 1;
+    creditCol = findColumn(headers, [/^credito/, /^credit/, /^entrada/]);
+    debitCol = findColumn(headers, [/^debito/, /^debit/, /^saida/]);
+    if (amountMatch >= 0) {
+      amountCol = amountMatch;
+    } else if (creditCol >= 0) {
+      amountCol = creditCol;
+    } else if (debitCol >= 0) {
+      amountCol = debitCol;
+    } else {
+      for (let i = headers.length - 1; i >= 0; i -= 1) {
+        if ((headers[i] ?? '').trim()) {
+          amountCol = i;
+          break;
+        }
+      }
+    }
     dateCol = dateMatch >= 0 ? dateMatch : 0;
     descCol = descMatch >= 0 ? descMatch : 1;
   }
@@ -135,13 +174,16 @@ export function parseCsv(content: string): ParsedTransaction[] {
       continue;
     }
     const row = rows[i] ?? [];
-    const rawAmount = amountCol >= 0 ? row[amountCol] : undefined;
-    const rawDate = row[dateCol] ?? '';
-    const description = normalizeDescription(row[descCol] ?? '') || 'Importação';
-    if (!rawAmount) {
+    const pick = pickAmount(row, amountCol, creditCol, debitCol);
+    if (!pick) {
       continue;
     }
-    const amount = parseAmount(rawAmount);
+    const rawDate = row[dateCol] ?? '';
+    const description = normalizeDescription(row[descCol] ?? '') || 'Importação';
+    let amount = parseAmount(pick.raw);
+    if (pick.forceNegative && !amount.startsWith('-')) {
+      amount = `-${amount}`;
+    }
     if (!amount || Number(amount) === 0) {
       continue;
     }
