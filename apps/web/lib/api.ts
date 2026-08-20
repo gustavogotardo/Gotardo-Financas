@@ -85,6 +85,40 @@ export type CreateCategoryInput = {
   parentId?: string;
 };
 
+export type EnvelopeRecord = {
+  id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  targetAmount: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  allocated: string;
+  spent: string;
+  balance: string;
+};
+
+export type CreateEnvelopeInput = {
+  name: string;
+  icon?: string;
+  targetAmount?: number;
+};
+
+export type EnvelopeAllocationRecord = {
+  id: string;
+  amount: string;
+  date: string;
+  note: string | null;
+  createdAt: string;
+};
+
+export type CreateAllocationInput = {
+  amount: number;
+  date?: string;
+  note?: string;
+};
+
 export class ApiError extends Error {
   status: number;
 

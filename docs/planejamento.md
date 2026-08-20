@@ -109,8 +109,11 @@ Sequência até o alfa (após E0.5/E0.6):
   refresh automático, dashboard com saldo total, receitas/despesas/resultado do
   mês, contas, categorias e transações — com criação de conta, categoria e
   transação, confirmação de pendentes e navegação por mês.
-
-### E1.1 — Dashboard por forma de pagamento (PRÓXIMA)
+- **E1.1 — Dashboard por forma de pagamento**: enum `PaymentMethod` (PIX, boleto,
+  cartões, transferência, dinheiro, outro) com **backfill** dos dados legados,
+  validação por enum nos DTOs, endpoint de agregação por método e período
+  (incluindo transações "sem método") com isolamento por tenant, e dashboard com
+  seções por forma de pagamento, subtotais do período e navegação por mês. ✅
 
 ### E0.5/E0.6 — Autenticação e isolamento por tenant
 
@@ -181,7 +184,7 @@ campos já presentes em `User` (passwordHash, role, familyId).
 - Migração de schema via `prisma migrate deploy` no start da API.
 - Conclusão do marco **ALFA**. ✅
 
-### E1.1 — Dashboard por forma de pagamento (PRÓXIMA)
+### E1.1 — Dashboard por forma de pagamento (CONCLUÍDA)
 
 Objetivo: dividir o dashboard em **seções por forma de pagamento** — transferência,
 boletos, PIX, cartão de crédito, cartão de débito, dinheiro — cada uma com

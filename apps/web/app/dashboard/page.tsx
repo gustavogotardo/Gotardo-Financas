@@ -8,6 +8,7 @@ import {
   type AccountRecord,
   type CashflowResponse,
   type CategoryRecord,
+  type EnvelopeRecord,
   type PaymentMethodRow,
   type TransactionRecord,
 } from '@/lib/api';
@@ -21,7 +22,9 @@ import {
 } from '@/lib/format';
 import { Badge, Button, Card, ErrorBox, Spinner, StatCard } from '@/components/ui';
 import { AccountForm } from '@/components/account-form';
+import { AllocationForm } from '@/components/allocation-form';
 import { CategoryForm } from '@/components/category-form';
+import { EnvelopeForm } from '@/components/envelope-form';
 import { TransactionForm } from '@/components/transaction-form';
 
 const MONTH_FORMAT = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
@@ -29,6 +32,7 @@ const MONTH_FORMAT = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'nu
 type DashboardData = {
   accounts: AccountRecord[];
   categories: CategoryRecord[];
+  envelopes: EnvelopeRecord[];
   cashflow: CashflowResponse;
   paymentMethods: PaymentMethodRow[];
   transactions: TransactionRecord[];
@@ -72,6 +76,9 @@ export default function DashboardPage() {
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountRecord | null>(null);
   const [editingCategory, setEditingCategory] = useState<CategoryRecord | null>(null);
+  const [showEnvelopeForm, setShowEnvelopeForm] = useState(false);
+  const [editingEnvelope, setEditingEnvelope] = useState<EnvelopeRecord | null>(null);
+  const [allocatingEnvelope, setAllocatingEnvelope] = useState<EnvelopeRecord | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -79,16 +86,18 @@ export default function DashboardPage() {
     setError(null);
     const range = monthRange(month);
     try {
-      const [accounts, categories, cashflow, paymentMethods, transactions] = await Promise.all([
-        apiFetch<AccountRecord[]>('/api/v1/accounts'),
-        apiFetch<CategoryRecord[]>('/api/v1/categories'),
-        apiFetch<CashflowResponse>(`/api/v1/reports/cashflow?from=${range.from}&to=${range.to}`),
-        apiFetch<PaymentMethodRow[]>(
-          `/api/v1/reports/payment-methods?from=${range.from}&to=${range.to}`,
-        ),
-        apiFetch<TransactionRecord[]>('/api/v1/transactions'),
-      ]);
-      setData({ accounts, categories, cashflow, paymentMethods, transactions });
+      const [accounts, categories, envelopes, cashflow, paymentMethods, transactions] =
+        await Promise.all([
+          apiFetch<AccountRecord[]>('/api/v1/accounts'),
+          apiFetch<CategoryRecord[]>('/api/v1/categories'),
+          apiFetch<EnvelopeRecord[]>('/api/v1/envelopes'),
+          apiFetch<CashflowResponse>(`/api/v1/reports/cashflow?from=${range.from}&to=${range.to}`),
+          apiFetch<PaymentMethodRow[]>(
+            `/api/v1/reports/payment-methods?from=${range.from}&to=${range.to}`,
+          ),
+          apiFetch<TransactionRecord[]>('/api/v1/transactions'),
+        ]);
+      setData({ accounts, categories, envelopes, cashflow, paymentMethods, transactions });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar os dados.');
     }
@@ -472,6 +481,132 @@ export default function DashboardPage() {
                           ) : null}
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            </section>
+
+            <section className="section">
+              <div className="section-head">
+                <h2>Envelopes</h2>
+                {canManage ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingEnvelope(null);
+                      setShowEnvelopeForm((show) => !show);
+                    }}
+                  >
+                    {showEnvelopeForm || editingEnvelope ? 'Fechar' : '+ Novo envelope'}
+                  </Button>
+                ) : null}
+              </div>
+              {editingEnvelope ? (
+                <EnvelopeForm
+                  envelope={editingEnvelope}
+                  onCancel={() => setEditingEnvelope(null)}
+                  onDone={async () => {
+                    setEditingEnvelope(null);
+                    setShowEnvelopeForm(false);
+                    await load();
+                  }}
+                />
+              ) : showEnvelopeForm ? (
+                <EnvelopeForm
+                  onCancel={() => setShowEnvelopeForm(false)}
+                  onDone={async () => {
+                    setShowEnvelopeForm(false);
+                    await load();
+                  }}
+                />
+              ) : null}
+              {allocatingEnvelope ? (
+                <AllocationForm
+                  envelope={allocatingEnvelope}
+                  onCancel={() => setAllocatingEnvelope(null)}
+                  onDone={async () => {
+                    setAllocatingEnvelope(null);
+                    await load();
+                  }}
+                />
+              ) : null}
+              <Card>
+                {data.envelopes.length === 0 ? (
+                  <p className="empty">Nenhum envelope cadastrado ainda.</p>
+                ) : (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Envelope</th>
+                        <th className="td-num">Meta</th>
+                        <th className="td-num">Alocado</th>
+                        <th className="td-num">Gasto</th>
+                        <th className="td-num">Saldo</th>
+                        {canManage ? <th>Ações</th> : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.envelopes.map((envelope) => {
+                        const target = Number(envelope.targetAmount ?? 0);
+                        const allocated = Number(envelope.allocated);
+                        const progress = target > 0 ? Math.min(100, (allocated / target) * 100) : 0;
+                        return (
+                          <tr key={envelope.id}>
+                            <td>
+                              <span className="envelope-name">
+                                {envelope.icon ? (
+                                  <span className="muted">{envelope.icon}</span>
+                                ) : null}{' '}
+                                {envelope.name}
+                              </span>
+                              {target > 0 ? (
+                                <span
+                                  className="progress"
+                                  title={`${progress.toFixed(0)}% da meta`}
+                                >
+                                  <span
+                                    className="progress-fill"
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="td-num">{target > 0 ? brl(target) : '—'}</td>
+                            <td className="td-num">{brl(envelope.allocated)}</td>
+                            <td className="td-num td-neg">{brl(envelope.spent)}</td>
+                            <td
+                              className={`td-num ${
+                                Number(envelope.balance) < 0 ? 'td-neg' : 'td-pos'
+                              }`}
+                            >
+                              {brl(envelope.balance)}
+                            </td>
+                            {canManage ? (
+                              <td>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={() => setAllocatingEnvelope(envelope)}
+                                >
+                                  Alocar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setShowEnvelopeForm(false);
+                                    setEditingEnvelope(envelope);
+                                  }}
+                                >
+                                  Editar
+                                </Button>
+                              </td>
+                            ) : null}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
