@@ -95,6 +95,8 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-gotardo}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?defina MINIO_ROOT_PASSWORD no .env}
+      ML_URL: http://ml:8000
+      ML_TIMEOUT_MS: '1500'
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,6 +132,10 @@ services:
       context: ./services/ml
       dockerfile: Dockerfile
     restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - ml-data:/data
     healthcheck:
       test:
         [
@@ -185,5 +191,6 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+  ml-data:
   caddy-data:
   caddy-config:

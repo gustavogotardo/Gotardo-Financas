@@ -11,6 +11,7 @@ import { Prisma, TransactionSource, TransactionStatus, TransactionType } from '@
 import { Queue, Worker } from 'bullmq';
 import { extname } from 'node:path';
 import type { AuthUser } from '../common/auth-user';
+import { CategorySuggesterService } from '../ml/category-suggester.service';
 import { PrismaService } from '../prisma/prisma.module';
 import { StorageService } from '../storage/storage.service';
 import { parseCsv } from './parsers/csv';
@@ -61,6 +62,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly config: ConfigService,
+    private readonly suggester: CategorySuggesterService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -147,6 +149,11 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       const existing = await this.findExistingKeys(familyId, accountId);
       const toCreate = parsed.filter((tx) => !existing.has(this.txKey(tx)));
 
+      const suggestedCategoryIds = await this.suggester.suggestMany(
+        familyId,
+        toCreate.map((item) => item.description),
+      );
+
       await this.prisma.$transaction(async (tx) => {
         await tx.document.update({
           where: { id: documentId },
@@ -154,7 +161,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
         });
         if (toCreate.length > 0) {
           await tx.transaction.createMany({
-            data: toCreate.map((item) => ({
+            data: toCreate.map((item, index) => ({
               familyId,
               accountId,
               documentId,
@@ -166,6 +173,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
               source: TransactionSource.IMPORT,
               externalId: item.externalId ?? null,
               paymentMethod: item.paymentMethod ?? null,
+              suggestedCategoryId: suggestedCategoryIds[index] ?? null,
             })),
           });
         }

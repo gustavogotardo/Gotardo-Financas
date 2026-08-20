@@ -165,6 +165,7 @@ model Category {
   parent         Category?        @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children       Category[]       @relation("CategoryHierarchy")
   transactions   Transaction[]
+  suggestedTransactions Transaction[] @relation("TransactionSuggestedCategory")
   recurringRules RecurringRule[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -215,6 +216,8 @@ model Transaction {
   account       Account            @relation(fields: [accountId], references: [id])
   categoryId    String?
   category      Category?          @relation(fields: [categoryId], references: [id])
+  suggestedCategoryId String?
+  suggestedCategory Category?      @relation("TransactionSuggestedCategory", fields: [suggestedCategoryId], references: [id], onDelete: SetNull)
   envelopeId    String?
   envelope      Envelope?          @relation(fields: [envelopeId], references: [id])
   documentId    String?
@@ -234,6 +237,7 @@ model Transaction {
   @@index([familyId])
   @@index([accountId])
   @@index([categoryId])
+  @@index([suggestedCategoryId])
   @@index([envelopeId])
   @@index([date])
 }

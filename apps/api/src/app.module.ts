@@ -13,6 +13,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { EnvelopesModule } from './envelopes/envelopes.module';
 import { ReportsModule } from './reports/reports.module';
 import { ImportsModule } from './imports/imports.module';
+import { MlModule } from './ml/ml.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -31,6 +32,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     EnvelopesModule,
     ReportsModule,
     ImportsModule,
+    MlModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

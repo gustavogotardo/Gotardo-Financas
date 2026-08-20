@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TransactionSource, TransactionStatus, TransactionType } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
+import { CategorySuggesterService } from '../ml/category-suggester.service';
 import type { AuthUser } from '../common/auth-user';
 import type { CreateTransactionDto } from './dto/create-transaction.dto';
 import type { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -8,13 +9,17 @@ import type { UpdateTransactionDto } from './dto/update-transaction.dto';
 const TX_INCLUDE = {
   account: { select: { id: true, name: true, type: true, currency: true } },
   category: { select: { id: true, name: true, parentId: true } },
+  suggestedCategory: { select: { id: true, name: true } },
 } as const;
 
 export type TransactionRecord = Prisma.TransactionGetPayload<{ include: typeof TX_INCLUDE }>;
 
 @Injectable()
 export class TransactionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly suggester: CategorySuggesterService,
+  ) {}
 
   list(user: AuthUser): Promise<TransactionRecord[]> {
     return this.prisma.transaction.findMany({
@@ -30,12 +35,16 @@ export class TransactionsService {
     const type = dto.type ?? TransactionType.EXPENSE;
     const status = dto.status ?? TransactionStatus.PENDING;
     const delta = this.balanceDelta(type, new Prisma.Decimal(dto.amount));
+    const suggestedCategoryId = dto.categoryId
+      ? undefined
+      : await this.suggester.suggest(user.familyId, dto.description);
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.transaction.create({
         data: {
           familyId: user.familyId,
           accountId: dto.accountId,
           categoryId: dto.categoryId,
+          suggestedCategoryId,
           envelopeId: dto.envelopeId,
           description: dto.description,
           amount: dto.amount,

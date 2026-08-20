@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [showImportForm, setShowImportForm] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -191,6 +192,23 @@ export default function DashboardPage() {
       setError(err instanceof Error ? err.message : 'Falha ao cancelar a transação.');
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function applySuggestion(tx: TransactionRecord) {
+    if (!tx.suggestedCategory) return;
+    setApplyingId(tx.id);
+    setError(null);
+    try {
+      await apiFetch(`/api/v1/transactions/${tx.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ categoryId: tx.suggestedCategory.id }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao aplicar a sugestão.');
+    } finally {
+      setApplyingId(null);
     }
   }
 
@@ -719,7 +737,17 @@ export default function DashboardPage() {
                             <tr key={tx.id}>
                               <td>{formatDate(tx.date)}</td>
                               <td>{tx.description}</td>
-                              <td>{tx.category?.name ?? '—'}</td>
+                              <td>
+                                {tx.category ? (
+                                  tx.category.name
+                                ) : tx.suggestedCategory ? (
+                                  <span className="suggestion">
+                                    Sugerido: {tx.suggestedCategory.name}
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
                               <td className="muted">{tx.account?.name ?? '—'}</td>
                               <td>
                                 <Badge tone={statusTone(tx.status)}>{statusLabel(tx.status)}</Badge>
@@ -734,15 +762,39 @@ export default function DashboardPage() {
                                     <Button
                                       type="button"
                                       variant="ghost"
-                                      disabled={confirmingId === tx.id || deletingId === tx.id}
+                                      disabled={
+                                        confirmingId === tx.id ||
+                                        deletingId === tx.id ||
+                                        applyingId === tx.id
+                                      }
                                       onClick={() => void confirmTransaction(tx.id)}
                                     >
                                       {confirmingId === tx.id ? 'Confirmando…' : 'Confirmar'}
                                     </Button>
+                                    {!tx.category && tx.suggestedCategory ? (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        disabled={
+                                          confirmingId === tx.id ||
+                                          deletingId === tx.id ||
+                                          applyingId === tx.id
+                                        }
+                                        onClick={() => void applySuggestion(tx)}
+                                      >
+                                        {applyingId === tx.id
+                                          ? 'Aplicando…'
+                                          : `Aplicar ${tx.suggestedCategory.name}`}
+                                      </Button>
+                                    ) : null}
                                     <Button
                                       type="button"
                                       variant="ghost"
-                                      disabled={confirmingId === tx.id || deletingId === tx.id}
+                                      disabled={
+                                        confirmingId === tx.id ||
+                                        deletingId === tx.id ||
+                                        applyingId === tx.id
+                                      }
                                       onClick={() => void cancelTransaction(tx.id, tx.description)}
                                     >
                                       {deletingId === tx.id ? 'Cancelando…' : 'Cancelar'}
