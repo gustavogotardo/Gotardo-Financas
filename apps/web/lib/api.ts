@@ -234,6 +234,50 @@ function dispatchSessionExpired(): void {
   window.dispatchEvent(new Event('gotardo:session-expired'));
 }
 
+const REFRESH_LOCK_KEY = 'gotardo.refresh-lock';
+const REFRESH_LOCK_TTL_MS = 8000;
+
+function tryAcquireRefreshLock(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const now = Date.now();
+    const raw = window.localStorage.getItem(REFRESH_LOCK_KEY);
+    if (raw) {
+      const holder = JSON.parse(raw) as { takenAt: number };
+      if (now - holder.takenAt < REFRESH_LOCK_TTL_MS) return false;
+    }
+    window.localStorage.setItem(REFRESH_LOCK_KEY, JSON.stringify({ takenAt: now }));
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function releaseRefreshLock(): void {
+  try {
+    window.localStorage.removeItem(REFRESH_LOCK_KEY);
+  } catch {
+    // localStorage indisponível: nada a liberar
+  }
+}
+
+function waitForRotatedTokens(previous: AuthTokens): Promise<AuthTokens> {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const check = () => {
+      const tokens = getTokens();
+      if (tokens && tokens.refreshToken !== previous.refreshToken) {
+        resolve(tokens);
+      } else if (Date.now() - started > REFRESH_LOCK_TTL_MS) {
+        reject(new ApiError(401, 'Sessão expirada. Faça login novamente.'));
+      } else {
+        setTimeout(check, 120);
+      }
+    };
+    check();
+  });
+}
+
 async function refreshTokens(): Promise<AuthTokens> {
   if (refreshPromise) return refreshPromise;
 
@@ -242,19 +286,30 @@ async function refreshTokens(): Promise<AuthTokens> {
     if (!current?.refreshToken) {
       throw new ApiError(401, 'Sessão expirada. Faça login novamente.');
     }
-    const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: current.refreshToken }),
-    });
-    if (!res.ok) {
-      setTokens(null);
-      dispatchSessionExpired();
-      throw new ApiError(401, 'Sessão expirada. Faça login novamente.');
+    if (!tryAcquireRefreshLock()) {
+      return waitForRotatedTokens(current);
     }
-    const tokens = (await res.json()) as AuthTokens;
-    setTokens(tokens);
-    return tokens;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: current.refreshToken }),
+      });
+      if (!res.ok) {
+        const tokens = getTokens();
+        if (tokens && tokens.refreshToken !== current.refreshToken) {
+          return tokens;
+        }
+        setTokens(null);
+        dispatchSessionExpired();
+        throw new ApiError(401, 'Sessão expirada. Faça login novamente.');
+      }
+      const tokens = (await res.json()) as AuthTokens;
+      setTokens(tokens);
+      return tokens;
+    } finally {
+      releaseRefreshLock();
+    }
   })().finally(() => {
     refreshPromise = null;
   });
