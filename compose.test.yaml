@@ -1,0 +1,77 @@
+name: gotardo-test
+
+# Infraestrutura de testes — portas diferentes para rodar ao lado do dev.
+# Uso: docker compose -f compose.test.yaml up -d  (ou `make test-up`)
+# Credenciais: .env.test
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gotardo_test
+      POSTGRES_PASSWORD: gotardo_test
+      POSTGRES_DB: gotardo_test
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gotardo_test -d gotardo_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - '6380:6379'
+    volumes:
+      - redis-test-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: gotardo_test
+      MINIO_ROOT_PASSWORD: gotardo_test_secret
+    ports:
+      - '9100:9000'
+      - '9101:9001'
+    volumes:
+      - minio-test-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: gotardo_test
+      MINIO_ROOT_PASSWORD: gotardo_test_secret
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/gotardo-test
+        mc mb --ignore-existing local/gotardo-test-imports
+        exit 0
+
+volumes:
+  postgres-test-data:
+  redis-test-data:
+  minio-test-data:

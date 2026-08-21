@@ -2,7 +2,7 @@ PY := uv run
 PATH := $(HOME)/.local/bin:$(PATH)
 export PATH
 
-.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart test-db-setup prod-up prod-up-local prod-build prod-down prod-down-volumes prod-logs prod-ps prod-backup
+.PHONY: help install test lint typecheck build format dev py-install py-test py-lint infra-up infra-down infra-down-volumes infra-logs infra-ps infra-restart test-db-setup test-up test-down test-down-volumes prod-up prod-up-local prod-build prod-down prod-down-volumes prod-logs prod-ps prod-backup
 
 help:
 	@echo "Gotardo Finanças — monorepo"
@@ -31,6 +31,9 @@ help:
 	@echo ""
 	@echo "Testes de integração (API):"
 	@echo "  test-db-setup cria o banco gotardo_test e aplica migrations"
+	@echo "  test-up       sobe infraestrutura de testes (portas separadas)"
+	@echo "  test-down     para infraestrutura de testes"
+	@echo "  test-down-volumes  para e apaga dados de testes"
 	@echo ""
 	@echo "Produção on-prem (compose.prod.yaml — precisa de .env):"
 	@echo "  prod-up       sobe a stack completa em produção (build + up)"
@@ -97,11 +100,22 @@ infra-down-volumes:
 infra-restart:
 	$(COMPOSE) restart
 
-TEST_DATABASE_URL ?= postgresql://gotardo:gotardo@localhost:5432/gotardo_test?schema=public
+TEST_DATABASE_URL ?= postgresql://gotardo_test:gotardo_test@localhost:5433/gotardo_test?schema=public
 
 test-db-setup:
-	docker exec gotardo-dev-postgres-1 psql -U gotardo -d gotardo -tc "SELECT 1 FROM pg_database WHERE datname='gotardo_test'" | grep -q 1 || docker exec gotardo-dev-postgres-1 createdb -U gotardo gotardo_test
+	docker exec gotardo-test-postgres-1 psql -U gotardo_test -d gotardo_test -tc "SELECT 1 FROM pg_database WHERE datname='gotardo_test'" | grep -q 1 || docker exec gotardo-test-postgres-1 createdb -U gotardo_test gotardo_test
 	cd packages/db && DATABASE_URL="$(TEST_DATABASE_URL)" pnpm exec prisma migrate deploy
+
+TEST_COMPOSE := docker compose -f compose.test.yaml
+
+test-up:
+	$(TEST_COMPOSE) up -d
+
+test-down:
+	$(TEST_COMPOSE) down
+
+test-down-volumes:
+	$(TEST_COMPOSE) down -v
 
 PROD_COMPOSE := docker compose -f compose.prod.yaml
 
