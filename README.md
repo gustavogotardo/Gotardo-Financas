@@ -4,6 +4,9 @@ Sistema de gerenciamento e planejamento financeiro familiar — **SaaS multi-ten
 
 > Planejamento detalhado (roadmap, escopo por fase e critérios de aceite):
 > [docs/planejamento.md](docs/planejamento.md)
+>
+> Especificação técnica completa (30 seções, modelo de dados, API, IA, segurança, roadmap):
+> [docs/especificacao-tecnica.md](docs/especificacao-tecnica.md)
 
 ## Estrutura
 
