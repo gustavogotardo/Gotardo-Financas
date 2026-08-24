@@ -144,12 +144,14 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     try {
       const buffer = await this.storage.get(document.storageKey);
       const ext = extname(document.storageKey).replace('.', '').toLowerCase();
-      const parsed =
-        ext === 'csv'
-          ? parseCsv(decodeText(buffer))
-          : ext === 'xlsx'
-            ? parseXlsx(buffer)
-            : parseOfx(decodeText(buffer));
+      let parsed: ParsedTransaction[];
+      if (ext === 'csv') {
+        parsed = parseCsv(decodeText(buffer));
+      } else if (ext === 'xlsx') {
+        parsed = await parseXlsx(buffer);
+      } else {
+        parsed = parseOfx(decodeText(buffer));
+      }
 
       const existing = await this.findExistingKeys(familyId, accountId);
       const toCreate = parsed.filter((tx) => !existing.has(this.txKey(tx)));

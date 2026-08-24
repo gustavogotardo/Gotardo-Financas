@@ -37,7 +37,7 @@ function splitLine(line: string, delim: string): string[] {
   return cells;
 }
 
-function parseBrDate(raw: string): string | null {
+export function parseBrDate(raw: string): string | null {
   const value = raw.trim();
   const ddmmyyyy = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (ddmmyyyy) {
@@ -62,7 +62,7 @@ function parseBrDate(raw: string): string | null {
   return null;
 }
 
-function parseAmount(raw: string): string {
+export function parseAmount(raw: string): string {
   let value = raw.replace(/[^\d.,-]/g, '');
   const negative = value.startsWith('-');
   value = value.replace(/-/g, '');
@@ -84,7 +84,7 @@ function parseAmount(raw: string): string {
   return `${negative ? '-' : ''}${value}`;
 }
 
-function normalizeHeader(value: string): string {
+export function normalizeHeader(value: string): string {
   return value
     .toLowerCase()
     .normalize('NFD')
@@ -92,7 +92,7 @@ function normalizeHeader(value: string): string {
     .trim();
 }
 
-function findColumn(headers: string[], patterns: RegExp[]): number {
+export function findColumn(headers: string[], patterns: RegExp[]): number {
   const index = headers.findIndex((header) =>
     patterns.some((pattern) => pattern.test(normalizeHeader(header))),
   );
@@ -115,7 +115,7 @@ function pickAmount(
   return fallback ? { raw: fallback, forceNegative: false } : null;
 }
 
-function detectHeaderIndex(rows: string[][]): number {
+export function detectHeaderIndex(rows: string[][]): number {
   for (let i = 0; i < Math.min(rows.length, 10); i += 1) {
     const line = (rows[i] ?? []).join(' ');
     if (

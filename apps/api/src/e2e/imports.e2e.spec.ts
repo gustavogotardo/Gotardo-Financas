@@ -5,7 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import request from 'supertest';
 import { randomUUID } from 'node:crypto';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { PrismaModule, PrismaService } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { AccountsModule } from '../accounts/accounts.module';
@@ -52,16 +52,22 @@ VERSION:102
 </BANKMSGSRSV1>
 </OFX>`;
 
-function buildXlsxSample(): Buffer {
-  const sheet = XLSX.utils.aoa_to_sheet([
-    ['data', 'descricao', 'valor'],
-    ['01/08/2026', 'PADARIA CENTRAL', -18.5],
-    ['05/08/2026', 'SALARIO', 3250],
-    ['10/08/2026', 'MERCADO', -120.3],
-  ]);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Extrato');
-  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+// Builds a real .xlsx workbook (via exceljs) with typed cells, mirroring what
+// a user exporting from Excel/Google Sheets actually produces: the date and
+// valor columns are native `Date`/`number` cells, not string literals. This
+// specifically regression-tests two bugs found in code review:
+//  - a native Date cell with day-of-month > 12 (24) used to corrupt/crash on
+//    the old string/CSV round-trip parser (ambiguous m/d/yy vs dd/mm/yy).
+//  - a native numeric cell >= 1000 (3250.50) used to get mangled 1000x by the
+//    comma/dot swapping logic meant for string amounts (e.g. "3,250.50").
+async function buildXlsxSample(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Extrato');
+  sheet.addRow(['data', 'descricao', 'valor']);
+  sheet.addRow([new Date(Date.UTC(2026, 7, 1)), 'PADARIA CENTRAL', -18.5]);
+  sheet.addRow([new Date(Date.UTC(2026, 7, 24)), 'SALARIO', 3250.5]);
+  sheet.addRow(['10/08/2026', 'MERCADO', -120.3]);
+  return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
 }
 
 type TokensResponse = { accessToken: string; refreshToken: string };
@@ -271,7 +277,7 @@ describe('Importação de extratos (e2e)', () => {
       .post('/api/v1/imports')
       .set('Authorization', `Bearer ${tokens.accessToken}`)
       .field('accountId', accountId)
-      .attach('file', buildXlsxSample(), 'extrato.xlsx');
+      .attach('file', await buildXlsxSample(), 'extrato.xlsx');
 
     expect(upload.status).toBe(201);
     const imported = upload.body as { id: string; status: string; transactionCount: number };
@@ -284,13 +290,18 @@ describe('Importação de extratos (e2e)', () => {
     expect(transactions).toHaveLength(3);
     expect(transactions.every((tx) => tx.status === 'PENDING')).toBe(true);
     expect(transactions.every((tx) => tx.source === 'IMPORT')).toBe(true);
-    const salario = transactions.find((tx) => tx.description === 'salario');
-    expect(salario?.amount.toString()).toBe('3250');
-    expect(salario?.type).toBe('INCOME');
     const padaria = transactions.find((tx) => tx.description === 'padaria central');
     expect(padaria?.amount.toString()).toBe('-18.5');
     expect(padaria?.type).toBe('EXPENSE');
     expect(padaria?.date.toISOString().slice(0, 10)).toBe('2026-08-01');
+    // Regression: native Date cell with day-of-month > 12 (24) must not be
+    // misread as month 24 (invalid) nor swapped to the 12th.
+    const salario = transactions.find((tx) => tx.description === 'salario');
+    expect(salario?.type).toBe('INCOME');
+    expect(salario?.date.toISOString().slice(0, 10)).toBe('2026-08-24');
+    // Regression: native numeric cell >= 1000 must not be corrupted 1000x by
+    // string-based comma/dot amount guessing (was producing 3.2505).
+    expect(salario?.amount.toString()).toBe('3250.5');
   });
 
   it('rejeita formato não suportado', async () => {
