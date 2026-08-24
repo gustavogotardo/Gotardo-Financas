@@ -35,6 +35,7 @@ export function TransactionForm({ accounts, categories, onCreated, onCancel }: P
     categoryId: '',
     date: new Date().toISOString().slice(0, 10),
   });
+  const [installments, setInstallments] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -56,6 +57,7 @@ export function TransactionForm({ accounts, categories, onCreated, onCancel }: P
         date: `${form.date}T12:00:00.000Z`,
         ...(form.categoryId ? { categoryId: form.categoryId } : {}),
         ...(form.paymentMethod ? { paymentMethod: form.paymentMethod } : {}),
+        ...(Number(installments) >= 2 ? { installments: Number(installments) } : {}),
       };
       await apiFetch('/api/v1/transactions', {
         method: 'POST',
@@ -155,6 +157,15 @@ export function TransactionForm({ accounts, categories, onCreated, onCancel }: P
               value={form.date}
               onChange={(e) => update('date', e.target.value)}
               required
+            />
+          </Field>
+          <Field label="Número de parcelas" hint="Opcional, entre 2 e 60">
+            <Input
+              type="number"
+              min={2}
+              max={60}
+              value={installments}
+              onChange={(e) => setInstallments(e.target.value)}
             />
           </Field>
         </div>

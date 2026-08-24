@@ -31,6 +31,7 @@ import { AllocationForm } from '@/components/allocation-form';
 import { CategoryForm } from '@/components/category-form';
 import { EnvelopeForm } from '@/components/envelope-form';
 import { ImportForm, ImportRow } from '@/components/import-form';
+import { InvoiceView } from '@/components/invoice-view';
 import { TransactionForm } from '@/components/transaction-form';
 
 const MONTH_FORMAT = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
@@ -91,6 +92,7 @@ export default function DashboardPage() {
   const [editingEnvelope, setEditingEnvelope] = useState<EnvelopeRecord | null>(null);
   const [allocatingEnvelope, setAllocatingEnvelope] = useState<EnvelopeRecord | null>(null);
   const [showImportForm, setShowImportForm] = useState(false);
+  const [invoiceAccount, setInvoiceAccount] = useState<AccountRecord | null>(null);
   const [statementAccountId, setStatementAccountId] = useState<string>('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -424,6 +426,19 @@ export default function DashboardPage() {
                           <td className="td-num">{brl(account.balance)}</td>
                           {canManage ? (
                             <td>
+                              {account.type === 'CREDIT_CARD' ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setInvoiceAccount((current) =>
+                                      current?.id === account.id ? null : account,
+                                    )
+                                  }
+                                >
+                                  {invoiceAccount?.id === account.id ? 'Fechar fatura' : 'Ver fatura'}
+                                </Button>
+                              ) : null}
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -442,6 +457,9 @@ export default function DashboardPage() {
                   </table>
                 )}
               </Card>
+              {invoiceAccount ? (
+                <InvoiceView account={invoiceAccount} onClose={() => setInvoiceAccount(null)} />
+              ) : null}
             </section>
 
             <section className="section">

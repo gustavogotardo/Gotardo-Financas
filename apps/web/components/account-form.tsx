@@ -5,7 +5,7 @@ import { apiFetch, type AccountRecord, type CreateAccountInput } from '@/lib/api
 import { accountTypeLabel } from '@/lib/format';
 import { Button, Card, ErrorBox, Field, Input, Select } from './ui';
 
-const ACCOUNT_TYPES = ['CHECKING', 'SAVINGS', 'INVESTMENT', 'CASH'];
+const ACCOUNT_TYPES = ['CHECKING', 'SAVINGS', 'INVESTMENT', 'CASH', 'CREDIT_CARD'];
 
 type Props = {
   account?: AccountRecord;
@@ -19,6 +19,9 @@ export function AccountForm({ account, onDone, onCancel }: Props) {
     name: account?.name ?? '',
     type: account?.type ?? 'CHECKING',
     institution: account?.institution ?? '',
+    creditLimit: account?.creditLimit ? Number(account.creditLimit) : undefined,
+    billingDay: account?.billingDay ?? undefined,
+    dueDay: account?.dueDay ?? undefined,
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -37,6 +40,13 @@ export function AccountForm({ account, onDone, onCancel }: Props) {
           name: form.name,
           type: form.type,
           ...(form.institution ? { institution: form.institution } : {}),
+          ...(form.type === 'CREDIT_CARD' && form.creditLimit
+            ? { creditLimit: form.creditLimit }
+            : {}),
+          ...(form.type === 'CREDIT_CARD' && form.billingDay
+            ? { billingDay: form.billingDay }
+            : {}),
+          ...(form.type === 'CREDIT_CARD' && form.dueDay ? { dueDay: form.dueDay } : {}),
         }),
       });
       await onDone();
@@ -94,6 +104,52 @@ export function AccountForm({ account, onDone, onCancel }: Props) {
               maxLength={100}
             />
           </Field>
+          {form.type === 'CREDIT_CARD' ? (
+            <>
+              <Field label="Limite (R$)">
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.creditLimit ?? ''}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      creditLimit: e.target.value ? Number(e.target.value) : undefined,
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="Dia de fechamento">
+                <Input
+                  type="number"
+                  min={1}
+                  max={28}
+                  value={form.billingDay ?? ''}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      billingDay: e.target.value ? Number(e.target.value) : undefined,
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="Dia de vencimento">
+                <Input
+                  type="number"
+                  min={1}
+                  max={28}
+                  value={form.dueDay ?? ''}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      dueDay: e.target.value ? Number(e.target.value) : undefined,
+                    }))
+                  }
+                />
+              </Field>
+            </>
+          ) : null}
         </div>
         {error ? <ErrorBox>{error}</ErrorBox> : null}
         <div className="form-actions">

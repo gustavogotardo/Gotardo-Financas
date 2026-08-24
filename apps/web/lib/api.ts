@@ -19,8 +19,33 @@ export type AccountRecord = {
   institution: string | null;
   currency: string;
   balance: string;
+  creditLimit: string | null;
+  billingDay: number | null;
+  dueDay: number | null;
   isArchived: boolean;
   createdAt: string;
+};
+
+export type InvoiceTransaction = {
+  id: string;
+  description: string;
+  amount: string;
+  type: string;
+  status: string;
+  date: string;
+  installmentNumber: number | null;
+  installmentTotal: number | null;
+  installmentGroupId: string | null;
+  categoryId: string | null;
+};
+
+export type AccountInvoice = {
+  accountId: string;
+  period: string;
+  closingDate: string;
+  dueDate: string;
+  transactions: InvoiceTransaction[];
+  total: string;
 };
 
 export type CashflowMonth = { month: string; income: string; expense: string; net: string };
@@ -111,12 +136,16 @@ export type CreateTransactionInput = {
   categoryId?: string;
   paymentMethod?: string;
   date: string;
+  installments?: number;
 };
 
 export type CreateAccountInput = {
   name: string;
   type?: string;
   institution?: string;
+  creditLimit?: number;
+  billingDay?: number;
+  dueDay?: number;
 };
 
 export type CreateCategoryInput = {
@@ -199,6 +228,12 @@ export type CreateInvitationInput = {
   email: string;
   role?: string;
 };
+
+export function getAccountInvoice(accountId: string, period?: string): Promise<AccountInvoice> {
+  return apiFetch<AccountInvoice>(
+    `/api/v1/accounts/${accountId}/invoice${period ? `?period=${period}` : ''}`,
+  );
+}
 
 export class ApiError extends Error {
   status: number;

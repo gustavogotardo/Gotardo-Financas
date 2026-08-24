@@ -34,6 +34,7 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   SAVINGS: 'Poupança',
   INVESTMENT: 'Investimento',
   CASH: 'Dinheiro',
+  CREDIT_CARD: 'Cartão de crédito',
 };
 
 export function accountTypeLabel(type: string): string {
