@@ -23,6 +23,7 @@ export enum AccountType {
   SAVINGS = 'SAVINGS',
   INVESTMENT = 'INVESTMENT',
   CASH = 'CASH',
+  CREDIT_CARD = 'CREDIT_CARD',
 }
 
 export enum PaymentMethod {
