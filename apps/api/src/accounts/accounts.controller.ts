@@ -1,6 +1,6 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { FamilyRole } from '@gotardo/db';
-import { AccountsService, type AccountRecord } from './accounts.service';
+import { AccountsService, type AccountInvoice, type AccountRecord } from './accounts.service';
 import type { AuthUser } from '../common/auth-user';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -25,6 +25,15 @@ export class AccountsController {
   @Get(':id')
   getById(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<AccountRecord> {
     return this.accounts.getById(user, id);
+  }
+
+  @Get(':id/invoice')
+  getInvoice(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query('period') period?: string,
+  ): Promise<AccountInvoice> {
+    return this.accounts.getInvoice(user, id, period);
   }
 
   @Roles(FamilyRole.OWNER, FamilyRole.ADMIN)

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma, TransactionSource, TransactionStatus, TransactionType } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import { CategorySuggesterService } from '../ml/category-suggester.service';
@@ -32,12 +33,17 @@ export class TransactionsService {
   async create(user: AuthUser, dto: CreateTransactionDto): Promise<TransactionRecord> {
     await this.ensureAccount(user, dto.accountId);
     await this.ensureOptionalRefs(user, dto.categoryId, dto.envelopeId);
-    const type = dto.type ?? TransactionType.EXPENSE;
-    const status = dto.status ?? TransactionStatus.PENDING;
-    const delta = this.balanceDelta(type, new Prisma.Decimal(dto.amount));
     const suggestedCategoryId = dto.categoryId
       ? undefined
       : await this.suggester.suggest(user.familyId, dto.description);
+
+    if (dto.installments && dto.installments >= 2) {
+      return this.createInstallments(user, dto, suggestedCategoryId);
+    }
+
+    const type = dto.type ?? TransactionType.EXPENSE;
+    const status = dto.status ?? TransactionStatus.PENDING;
+    const delta = this.balanceDelta(type, new Prisma.Decimal(dto.amount));
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.transaction.create({
         data: {
@@ -60,6 +66,55 @@ export class TransactionsService {
         await this.applyDelta(tx, dto.accountId, delta);
       }
       return created;
+    });
+  }
+
+  /**
+   * Cria uma compra parcelada como N transações PENDING vinculadas por
+   * `installmentGroupId`. Nenhuma delta de saldo é aplicado na criação, já
+   * que todas as parcelas nascem PENDING (mesmo comportamento do fluxo
+   * PENDING de uma transação avulsa). Retorna a primeira parcela.
+   */
+  private async createInstallments(
+    user: AuthUser,
+    dto: CreateTransactionDto,
+    suggestedCategoryId: string | null | undefined,
+  ): Promise<TransactionRecord> {
+    const total = dto.installments!;
+    const amounts = this.splitAmount(dto.amount, total);
+    const baseDate = dto.date ?? new Date();
+    const type = dto.type ?? TransactionType.EXPENSE;
+    const installmentGroupId = randomUUID();
+
+    return this.prisma.$transaction(async (tx) => {
+      let first: TransactionRecord | undefined;
+      for (let i = 0; i < total; i++) {
+        const installmentNumber = i + 1;
+        const created = await tx.transaction.create({
+          data: {
+            familyId: user.familyId,
+            accountId: dto.accountId,
+            categoryId: dto.categoryId,
+            suggestedCategoryId,
+            envelopeId: dto.envelopeId,
+            description: dto.description,
+            amount: amounts[i]!,
+            type,
+            status: TransactionStatus.PENDING,
+            source: dto.source ?? TransactionSource.MANUAL,
+            paymentMethod: dto.paymentMethod,
+            date: this.addMonthsUtc(baseDate, i),
+            installmentNumber,
+            installmentTotal: total,
+            installmentGroupId,
+          },
+          include: TX_INCLUDE,
+        });
+        if (installmentNumber === 1) {
+          first = created;
+        }
+      }
+      return first!;
     });
   }
 
@@ -92,6 +147,25 @@ export class TransactionsService {
     const willBeConfirmed = nextStatus === TransactionStatus.CONFIRMED;
     const oldDelta = this.balanceDelta(current.type, new Prisma.Decimal(Number(current.amount)));
     const newDelta = this.balanceDelta(nextType, nextAmount);
+
+    // Campos compartilhados de parcelamento: description/categoryId/envelopeId/paymentMethod
+    // propagam para as parcelas irmãs PENDING (amount/date/status/type/accountId são
+    // legitimamente por parcela e nunca propagam).
+    const sharedChanges: Prisma.TransactionUncheckedUpdateManyInput = {};
+    if (dto.description !== undefined) {
+      sharedChanges.description = dto.description;
+    }
+    if (dto.categoryId !== undefined) {
+      sharedChanges.categoryId = dto.categoryId;
+    }
+    if (dto.envelopeId !== undefined) {
+      sharedChanges.envelopeId = dto.envelopeId;
+    }
+    if (dto.paymentMethod !== undefined) {
+      sharedChanges.paymentMethod = dto.paymentMethod;
+    }
+    const hasSharedChanges = Object.keys(sharedChanges).length > 0;
+
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.transaction.update({
         where: { id },
@@ -114,6 +188,18 @@ export class TransactionsService {
       }
       if (willBeConfirmed) {
         await this.applyDelta(tx, nextAccountId, newDelta);
+      }
+      if (current.installmentGroupId && hasSharedChanges) {
+        await tx.transaction.updateMany({
+          where: {
+            installmentGroupId: current.installmentGroupId,
+            status: TransactionStatus.PENDING,
+            id: { not: id },
+            deletedAt: null,
+            familyId: user.familyId,
+          },
+          data: sharedChanges,
+        });
       }
       return updated;
     });
@@ -160,6 +246,39 @@ export class TransactionsService {
         throw new NotFoundException('Envelope não encontrado');
       }
     }
+  }
+
+  /**
+   * Divide `amount` em `count` parcelas iguais (2 casas decimais), colocando
+   * qualquer resto de arredondamento na última parcela para que a soma seja
+   * exatamente igual ao valor original.
+   */
+  private splitAmount(amount: number, count: number): string[] {
+    const totalCents = Math.round(amount * 100);
+    const baseCents = Math.floor(totalCents / count);
+    const amounts: string[] = [];
+    for (let i = 0; i < count; i++) {
+      amounts.push((baseCents / 100).toFixed(2));
+    }
+    const remainderCents = totalCents - baseCents * count;
+    const lastIndex = count - 1;
+    amounts[lastIndex] = ((baseCents + remainderCents) / 100).toFixed(2);
+    return amounts;
+  }
+
+  /** Soma `months` meses a `date`, preservando o horário (aritmética em UTC). */
+  private addMonthsUtc(date: Date, months: number): Date {
+    return new Date(
+      Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth() + months,
+        date.getUTCDate(),
+        date.getUTCHours(),
+        date.getUTCMinutes(),
+        date.getUTCSeconds(),
+        date.getUTCMilliseconds(),
+      ),
+    );
   }
 
   private balanceDelta(type: TransactionType, amount: Prisma.Decimal): Prisma.Decimal {

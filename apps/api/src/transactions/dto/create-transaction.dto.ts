@@ -2,11 +2,14 @@ import { Type } from 'class-transformer';
 import {
   IsDate,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 import { PaymentMethod, TransactionSource, TransactionStatus, TransactionType } from '@gotardo/db';
@@ -52,4 +55,10 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(60)
+  installments?: number;
 }

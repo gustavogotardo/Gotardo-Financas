@@ -1,4 +1,15 @@
-import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { AccountType, Currency } from '@gotardo/db';
 
 export class CreateAccountDto {
@@ -19,4 +30,21 @@ export class CreateAccountDto {
   @IsOptional()
   @IsEnum(Currency)
   currency?: Currency;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  creditLimit?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(28)
+  billingDay?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(28)
+  dueDay?: number;
 }
