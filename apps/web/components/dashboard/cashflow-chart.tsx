@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { apiFetch, type CashflowResponse } from '@/lib/api';
-import { brl } from '@/lib/format';
+import { brl, monthsRange } from '@/lib/format';
 import { Card, ErrorBox, Select, Spinner } from '@/components/ui';
 
 const PERIOD_OPTIONS = [
@@ -36,17 +36,6 @@ const MONTH_ABBREVIATIONS = [
   'dez',
 ];
 
-function toISODate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function monthsRange(monthsBack: number): { from: string; to: string } {
-  const now = new Date();
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const from = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
-  return { from: toISODate(from), to: toISODate(to) };
-}
-
 /** Formats a "YYYY-MM" month key as a short pt-BR label, e.g. "2026-01" -> "jan/26". */
 function monthShortLabel(month: string): string {
   const [year, monthNumber] = month.split('-');
@@ -62,7 +51,12 @@ type ChartPoint = {
   net: number;
 };
 
-export function CashflowChart() {
+type Props = {
+  /** Bumped by the parent whenever dashboard data reloads, to trigger a refetch here too. */
+  refreshToken?: number;
+};
+
+export function CashflowChart({ refreshToken }: Props) {
   const [months, setMonths] = useState(6);
   const [cashflow, setCashflow] = useState<CashflowResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +82,7 @@ export function CashflowChart() {
     return () => {
       cancelled = true;
     };
-  }, [months]);
+  }, [months, refreshToken]);
 
   const chartData: ChartPoint[] = useMemo(
     () =>
@@ -130,9 +124,7 @@ export function CashflowChart() {
                   tickFormatter={(value: number) => brl(value)}
                   width={90}
                 />
-                <Tooltip
-                  formatter={(value, name) => [brl(Number(value ?? 0)), String(name)]}
-                />
+                <Tooltip formatter={(value, name) => [brl(Number(value ?? 0)), String(name)]} />
                 <Legend />
                 <Line
                   type="monotone"

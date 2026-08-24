@@ -1,15 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { CategoryExpenseRow } from '@/lib/api';
 import { brl } from '@/lib/format';
 import { Card } from '@/components/ui';
@@ -54,7 +46,11 @@ export function CategoryChart({ expensesByCategory }: Props) {
                 margin={{ top: 8, right: 24, left: 8, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(value: number) => brl(value)} />
+                <XAxis
+                  type="number"
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value: number) => brl(value)}
+                />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
                 <Tooltip formatter={(value) => brl(Number(value ?? 0))} />
                 <Bar dataKey="total" name="Total" fill="#dc2626" radius={[0, 4, 4, 0]} />

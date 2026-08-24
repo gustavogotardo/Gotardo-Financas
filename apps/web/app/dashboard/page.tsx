@@ -39,7 +39,11 @@ export default function DashboardPage() {
   const [showForm, setShowForm] = useState(false);
   const [statementAccountId, setStatementAccountId] = useState<string>('');
 
-  const { data, error, reload } = useDashboardData(month, statementAccountId, Boolean(user));
+  const { data, error, reload, version } = useDashboardData(
+    month,
+    statementAccountId,
+    Boolean(user),
+  );
 
   useEffect(() => {
     if (!statementAccountId && data && data.accounts.length > 0) {
@@ -61,8 +65,8 @@ export default function DashboardPage() {
   );
 
   const pendingCount = useMemo(
-    () => (data?.transactions ?? []).filter((tx) => tx.status === 'PENDING').length,
-    [data],
+    () => monthTransactions.filter((tx) => tx.status === 'PENDING').length,
+    [monthTransactions],
   );
 
   if (loading || !user) {
@@ -78,7 +82,7 @@ export default function DashboardPage() {
   const income = data ? Number(data.cashflow.income) : 0;
   const expense = data ? Number(data.cashflow.expense) : 0;
   const net = income - expense;
-  const savingsRate = income > 0 ? ((income - expense) / income) * 100 : 0;
+  const savingsRate = income > 0 ? ((income - expense) / income) * 100 : expense > 0 ? -100 : 0;
 
   async function handleLogout() {
     await logout();
@@ -171,7 +175,7 @@ export default function DashboardPage() {
               />
             </div>
 
-            <CashflowChart />
+            <CashflowChart refreshToken={version} />
 
             <AccountsSection accounts={data.accounts} canManage={canManage} onReload={reload} />
 

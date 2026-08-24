@@ -1,7 +1,7 @@
 'use client';
 
 import type { AccountRecord, AccountStatement } from '@/lib/api';
-import { brl, formatDate, statusLabel } from '@/lib/format';
+import { brl, formatDate, statusLabel, statusTone } from '@/lib/format';
 import { Badge, Card, Select, StatCard } from '@/components/ui';
 
 type Props = {
@@ -10,19 +10,6 @@ type Props = {
   statementAccountId: string;
   onStatementAccountChange: (accountId: string) => void;
 };
-
-function statusTone(status: string): string {
-  switch (status) {
-    case 'CONFIRMED':
-      return 'success';
-    case 'REJECTED':
-      return 'danger';
-    case 'PENDING':
-      return 'warning';
-    default:
-      return 'info';
-  }
-}
 
 export function AccountStatementSection({
   accounts,

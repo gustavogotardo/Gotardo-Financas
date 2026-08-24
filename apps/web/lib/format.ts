@@ -18,15 +18,24 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+export function toISODate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 export function monthRange(reference = new Date()): { from: string; to: string } {
   const year = reference.getFullYear();
   const month = reference.getMonth();
   const from = new Date(year, month, 1);
   const to = new Date(year, month + 1, 0);
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
-  };
+  return { from: toISODate(from), to: toISODate(to) };
+}
+
+/** Range spanning `monthsBack` full calendar months ending in the current month. */
+export function monthsRange(monthsBack: number): { from: string; to: string } {
+  const now = new Date();
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const from = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
+  return { from: toISODate(from), to: toISODate(to) };
 }
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -86,4 +95,17 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
+}
+
+export function statusTone(status: string): string {
+  switch (status) {
+    case 'CONFIRMED':
+      return 'success';
+    case 'REJECTED':
+      return 'danger';
+    case 'PENDING':
+      return 'warning';
+    default:
+      return 'info';
+  }
 }

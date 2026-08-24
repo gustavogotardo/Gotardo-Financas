@@ -1,8 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { apiFetch, type AnomalyRow, type PaymentMethodRow, type TransactionRecord } from '@/lib/api';
-import { brl, formatDate, paymentMethodLabel, statusLabel } from '@/lib/format';
+import {
+  apiFetch,
+  type AnomalyRow,
+  type PaymentMethodRow,
+  type TransactionRecord,
+} from '@/lib/api';
+import { brl, formatDate, paymentMethodLabel, statusLabel, statusTone } from '@/lib/format';
 import { Badge, Button, Card, ErrorBox } from '@/components/ui';
 
 type Props = {
@@ -12,19 +17,6 @@ type Props = {
   canManage: boolean;
   onReload: () => Promise<void>;
 };
-
-function statusTone(status: string): string {
-  switch (status) {
-    case 'CONFIRMED':
-      return 'success';
-    case 'REJECTED':
-      return 'danger';
-    case 'PENDING':
-      return 'warning';
-    default:
-      return 'info';
-  }
-}
 
 export function TransactionsSection({
   transactions,

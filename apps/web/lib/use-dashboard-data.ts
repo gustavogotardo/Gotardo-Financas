@@ -35,6 +35,8 @@ export type UseDashboardDataResult = {
   data: DashboardData | null;
   error: string | null;
   reload: () => Promise<void>;
+  /** Increments on every successful load, so children can refetch their own data in sync. */
+  version: number;
 };
 
 /**
@@ -51,6 +53,7 @@ export function useDashboardData(
 ): UseDashboardDataResult {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -104,6 +107,7 @@ export function useDashboardData(
         anomalies,
         transactions,
       });
+      setVersion((v) => v + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar os dados.');
     }
@@ -113,5 +117,5 @@ export function useDashboardData(
     if (enabled) void load();
   }, [enabled, load]);
 
-  return { data, error, reload: load };
+  return { data, error, reload: load, version };
 }
