@@ -414,7 +414,7 @@ export default function DashboardPage() {
                         <th>Tipo</th>
                         <th>Instituição</th>
                         <th className="td-num">Saldo</th>
-                        {canManage ? <th>Ações</th> : null}
+                        <th>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -424,21 +424,21 @@ export default function DashboardPage() {
                           <td>{accountTypeLabel(account.type)}</td>
                           <td className="muted">{account.institution ?? '—'}</td>
                           <td className="td-num">{brl(account.balance)}</td>
-                          {canManage ? (
-                            <td>
-                              {account.type === 'CREDIT_CARD' ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    setInvoiceAccount((current) =>
-                                      current?.id === account.id ? null : account,
-                                    )
-                                  }
-                                >
-                                  {invoiceAccount?.id === account.id ? 'Fechar fatura' : 'Ver fatura'}
-                                </Button>
-                              ) : null}
+                          <td>
+                            {account.type === 'CREDIT_CARD' ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() =>
+                                  setInvoiceAccount((current) =>
+                                    current?.id === account.id ? null : account,
+                                  )
+                                }
+                              >
+                                {invoiceAccount?.id === account.id ? 'Fechar fatura' : 'Ver fatura'}
+                              </Button>
+                            ) : null}
+                            {canManage ? (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -449,8 +449,8 @@ export default function DashboardPage() {
                               >
                                 Editar
                               </Button>
-                            </td>
-                          ) : null}
+                            ) : null}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
