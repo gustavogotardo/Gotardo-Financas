@@ -83,44 +83,18 @@ pnpm format
 
 ## Estado atual
 
-Fase E0.1 (fundação do monorepo) concluída: estrutura de workspaces, configs base
-(TS, ESLint flat, Prettier, editorconfig), health endpoints na API, nos serviços
-Python e página inicial no web, com todas as validações passando.
+**Marco BETA concluído** (fases E0.1 a E1.6 — ver [docs/planejamento.md](docs/planejamento.md)
+e [docs/especificacao-tecnica.md](docs/especificacao-tecnica.md) §23 para o detalhamento
+por fase): fundação do monorepo, infraestrutura de dev via Docker Compose, schema Prisma
+completo, autenticação com isolamento por tenant, CRUD de contas/categorias/transações/
+envelopes, relatórios (fluxo de caixa, gastos por categoria/envelope, extrato de conta),
+deploy on-prem em produção (marco ALFA, abaixo), dashboard por forma de pagamento,
+importação de extratos (OFX/CSV) com fila BullMQ e MinIO, categorização automática e
+detecção de anomalias via serviço de ML (`services/ml`), painel de família (convites,
+papéis) e PWA instalável.
 
-Fase E0.3 (docker-compose dev) concluída: infraestrutura de desenvolvimento
-(PostgreSQL 16, Redis 7, MinIO) provisionada via `compose.dev.yaml`, com
-healthchecks, volumes persistentes, criação automática dos buckets e targets no
-Makefile (`make infra-up`). Apps e serviços Python continuam rodando no host
-(`pnpm dev` / uv) para hot-reload rápido.
-
-Fase E0.4 (schema Prisma) concluída: pacote `packages/db` com o schema do domínio
-(tenant `Family`, usuários, contas, categorias hierárquicas, envelopes com
-alocações, transações, documentos e regras recorrentes), enums espelhando
-`packages/shared`, migration inicial aplicada no PostgreSQL e client gerado.
-
-Fase E0.5/E0.6 (autenticação e isolamento por tenant) concluída: registro com
-criação automática da família (OWNER), login, sessão com JWT + refresh token com
-rotação e revogação, guard global (rotas públicas marcadas com `@Public`), rate
-limit em auth, convites por token, troca de papéis, e primeiro módulo de domínio
-isolado (contas). Testes e2e cobrem o cruzamento de tenants (retorna 404).
-
-Fase E0.8 (contas e categorias) concluída: CRUD de contas e categorias
-hierárquicas (subcategoria via `parentId`) com isolamento por família. Papéis:
-OWNER/ADMIN gerenciam; MEMBER/VIEWER somente leem. Hierarquia protegida contra
-ciclos e exclusão de categoria com subcategorias.
-
-Fase E0.9 (transações) concluída: CRUD manual vinculado a conta/categoria, com
-saldo da conta atualizado automaticamente ao confirmar (PENDING → CONFIRMED,
-incluindo edição e exclusão que revertem/ajustam) e fluxo de revisão por status.
-Papéis: OWNER/ADMIN gerenciam; MEMBER/VIEWER leem.
-
-Fase E0.10 (envelopes) concluída: CRUD de envelopes com meta (`targetAmount`),
-alocações/funding e resumo por envelope `alocado − gasto` (despesas confirmadas).
-Papéis: OWNER/ADMIN gerenciam; MEMBER/VIEWER leem.
-
-Fase E0.11 (relatórios) concluída: fluxo de caixa (entradas vs. saídas por
-período e por mês), gastos por categoria e por envelope, e extrato por conta com
-saldo de abertura/fechamento. Somente leitura, disponível a qualquer membro.
+**Próxima fase: E2 — Enrichment**, iniciando pelo Épico E2.1 (importação XLSX). Ver
+§30 de `docs/especificacao-tecnica.md` para os próximos passos completos.
 
 ## Deploy on-prem (E0.12 — marco ALFA)
 
@@ -139,9 +113,8 @@ make prod-backup            # backup manual (pg_dump → MinIO, diário automát
 - Migrações aplicadas no start da API (`prisma migrate deploy`).
 - Logs com rotação (`10m` × 3 por serviço).
 
-Backlog pós-ALFA: dashboard por forma de pagamento (E1.1), filas BullMQ
-(importação/OCR/ML), OCR de comprovantes e serviços de ML
-(categorização/anomalias).
+Backlog pós-ALFA (E1.1 a E1.6) concluído desde então — ver "Estado atual" acima.
+Pendente: OCR de comprovantes escaneados (Fase E4, adiada, prioridade P3).
 
 ## Decisões de produto
 
