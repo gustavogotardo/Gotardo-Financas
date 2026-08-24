@@ -66,38 +66,40 @@ export function InvoiceView({ account, onClose }: Props) {
               <span className="stat-value">{brl(invoice.total)}</span>
             </div>
           </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Descrição</th>
-                <th>Parcela</th>
-                <th className="td-num">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.transactions.length === 0 ? (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
                 <tr>
-                  <td colSpan={4} className="muted">
-                    Nenhuma transação nesta fatura.
-                  </td>
+                  <th>Data</th>
+                  <th>Descrição</th>
+                  <th>Parcela</th>
+                  <th className="td-num">Valor</th>
                 </tr>
-              ) : (
-                invoice.transactions.map((tx) => (
-                  <tr key={tx.id}>
-                    <td>{formatDate(tx.date)}</td>
-                    <td>{tx.description}</td>
-                    <td className="muted">
-                      {tx.installmentNumber && tx.installmentTotal
-                        ? `${tx.installmentNumber}/${tx.installmentTotal}`
-                        : '—'}
+              </thead>
+              <tbody>
+                {invoice.transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="muted">
+                      Nenhuma transação nesta fatura.
                     </td>
-                    <td className="td-num">{brl(tx.amount)}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  invoice.transactions.map((tx) => (
+                    <tr key={tx.id}>
+                      <td>{formatDate(tx.date)}</td>
+                      <td>{tx.description}</td>
+                      <td className="muted">
+                        {tx.installmentNumber && tx.installmentTotal
+                          ? `${tx.installmentNumber}/${tx.installmentTotal}`
+                          : '—'}
+                      </td>
+                      <td className="td-num">{brl(tx.amount)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </>
       ) : null}
     </Card>
