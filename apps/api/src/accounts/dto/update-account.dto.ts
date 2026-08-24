@@ -35,6 +35,7 @@ export class UpdateAccountDto {
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
+  @Max(9_999_999_999.99)
   creditLimit?: number;
 
   @IsOptional()

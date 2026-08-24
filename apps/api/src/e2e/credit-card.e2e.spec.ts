@@ -378,4 +378,71 @@ describe('Cartões de crédito: fatura e parcelamento (e2e)', () => {
     expect(updatedSecond.description).toBe('Compra em 3x');
     expect(updatedSecond.status).toBe('CONFIRMED');
   });
+
+  it('parcelamento com compra em 31/jan gera datas 31/jan, 28/fev e 31/mar (sem pular fevereiro)', async () => {
+    const { token } = await setupFamily('cc-eom');
+    const account = await createCheckingAccount(token, 'Conta fim de mês');
+    const accountId = (account.body as { id: string }).id;
+
+    const created = await createTransaction(token, {
+      accountId,
+      description: 'Compra em 31/jan',
+      amount: 300,
+      type: 'EXPENSE',
+      date: '2026-01-31T12:00:00.000Z',
+      installments: 3,
+    });
+    expect(created.status).toBe(201);
+    const first = created.body as { installmentGroupId: string };
+
+    const all = await prisma.transaction.findMany({
+      where: { installmentGroupId: first.installmentGroupId },
+      orderBy: { installmentNumber: 'asc' },
+    });
+    expect(all).toHaveLength(3);
+    // 2026 não é bissexto, então fevereiro tem 28 dias.
+    expect(all.map((tx) => tx.date.toISOString().slice(0, 10))).toEqual([
+      '2026-01-31',
+      '2026-02-28',
+      '2026-03-31',
+    ]);
+  });
+
+  it('rejeita parcelamento cujo valor por parcela arredondaria para zero', async () => {
+    const { token } = await setupFamily('cc-low-amount');
+    const account = await createCheckingAccount(token, 'Conta valor baixo');
+    const accountId = (account.body as { id: string }).id;
+
+    const tooLow = await createTransaction(token, {
+      accountId,
+      description: 'Compra irrisória',
+      amount: 0.01,
+      type: 'EXPENSE',
+      installments: 60,
+    });
+    expect(tooLow.status).toBe(400);
+
+    // Caso limite: 60 centavos em 60 parcelas dá exatamente 1 centavo cada,
+    // então deve ser aceito.
+    const borderline = await createTransaction(token, {
+      accountId,
+      description: 'Compra no limite',
+      amount: 0.6,
+      type: 'EXPENSE',
+      installments: 60,
+    });
+    expect(borderline.status).toBe(201);
+    const first = borderline.body as { installmentGroupId: string };
+    const all = await prisma.transaction.findMany({
+      where: { installmentGroupId: first.installmentGroupId },
+    });
+    expect(all).toHaveLength(60);
+    expect(all.every((tx) => tx.amount.toString() === '0.01')).toBe(true);
+  });
+
+  it('rejeita creditLimit acima do limite da coluna Decimal(12,2) com 400 (não 500)', async () => {
+    const { token } = await setupFamily('cc-limit-overflow');
+    const res = await createCreditCard(token, { creditLimit: 99999999999999 });
+    expect(res.status).toBe(400);
+  });
 });

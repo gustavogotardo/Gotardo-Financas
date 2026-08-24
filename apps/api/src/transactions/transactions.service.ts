@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma, TransactionSource, TransactionStatus, TransactionType } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
@@ -38,6 +38,9 @@ export class TransactionsService {
       : await this.suggester.suggest(user.familyId, dto.description);
 
     if (dto.installments && dto.installments >= 2) {
+      if (Math.floor(Math.round(dto.amount * 100) / dto.installments) < 1) {
+        throw new BadRequestException('Valor muito baixo para o número de parcelas informado');
+      }
       return this.createInstallments(user, dto, suggestedCategoryId);
     }
 
@@ -266,13 +269,23 @@ export class TransactionsService {
     return amounts;
   }
 
-  /** Soma `months` meses a `date`, preservando o horário (aritmética em UTC). */
+  /**
+   * Soma `months` meses a `date`, preservando o horário (aritmética em UTC).
+   * Quando o dia original não existe no mês de destino (ex.: 31 em um mês
+   * com 30 dias, ou 29/30/31 de fevereiro), o dia é ajustado ("clampado")
+   * para o último dia válido do mês de destino, em vez de deixar o
+   * `Date.UTC` normalizar (rolar) para o mês seguinte.
+   */
   private addMonthsUtc(date: Date, months: number): Date {
+    const targetYear = date.getUTCFullYear();
+    const targetMonth = date.getUTCMonth() + months;
+    const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+    const day = Math.min(date.getUTCDate(), lastDayOfTargetMonth);
     return new Date(
       Date.UTC(
-        date.getUTCFullYear(),
-        date.getUTCMonth() + months,
-        date.getUTCDate(),
+        targetYear,
+        targetMonth,
+        day,
         date.getUTCHours(),
         date.getUTCMinutes(),
         date.getUTCSeconds(),
