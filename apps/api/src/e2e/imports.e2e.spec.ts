@@ -13,7 +13,7 @@ import { ImportsModule } from '../imports/imports.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
-process.env.DATABASE_URL = 'postgresql://gotardo:gotardo@localhost:5432/gotardo_test?schema=public';
+process.env.DATABASE_URL = 'postgresql://gotardo_test:gotardo_test@localhost:5433/gotardo_test?schema=public';
 process.env.JWT_ACCESS_SECRET = 'e2e-jwt-secret';
 process.env.JWT_ACCESS_TTL = '15m';
 process.env.JWT_REFRESH_TTL = '30d';

@@ -6,7 +6,9 @@ description: Create and apply a Prisma migration in packages/db after changing s
 # Prisma migration workflow
 
 1. Edit `packages/db/prisma/schema.prisma`.
-2. Dev: `pnpm --filter @gotardo/db db:migrate` — creates a new named migration, applies it to the local dev DB, regenerates the Prisma client.
+2. Dev: `pnpm --filter @gotardo/db db:migrate` — creates a new named migration, applies it to the local dev DB, regenerates the Prisma client. This runs `prisma migrate dev`, which prompts interactively for a migration name if none is given.
+   - **Don't** try to pass the name as `pnpm --filter @gotardo/db db:migrate -- --name <name>` — pnpm forwards a literal `--` before `--name` in this workspace setup, so Prisma never parses `--name` and the command hangs waiting on the interactive prompt instead.
+   - To name it non-interactively, run Prisma directly instead: `cd packages/db && DATABASE_URL=<dev DATABASE_URL> npx prisma migrate dev --name <name>`.
 3. `pnpm build` at the repo root so `apps/api` (and anything else depending on `@gotardo/db`) picks up the regenerated client. A bare `pnpm --filter @gotardo/api dev` assumes `@gotardo/db`/`@gotardo/shared` are already built — `turbo.json` only wires `^build` before `lint`/`typecheck`/`test`, not before `dev`.
 4. Enum change? Mirror it by hand in `packages/shared/src` in the same change, not a follow-up — Prisma enums intentionally duplicate the shared TS enums.
 5. New tenant-owned table? Add `familyId` + `@@index([familyId])`. This index is for query performance only — there's no DB-level row security; isolation is enforced in the NestJS service layer.

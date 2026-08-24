@@ -10,7 +10,7 @@ Reference implementation for every step below: `apps/api/src/accounts/accounts.s
    - Add `deletedAt DateTime?` if the resource should support soft delete.
    - New enums go here AND must be mirrored in `packages/shared/src` — change both together.
 
-2. **Migrate + build** — `pnpm --filter @gotardo/db db:migrate` (name the migration), then `pnpm build` at repo root so the regenerated Prisma client is picked up by `apps/api`.
+2. **Migrate + build** — `pnpm --filter @gotardo/db db:migrate` (name the migration; see `prisma-migration` skill for the non-interactive invocation — passing `-- --name <name>` hangs), then `pnpm build` at repo root so the regenerated Prisma client is picked up by `apps/api`.
 
 3. **Shared types** — add/extend request/response shapes and enums in `packages/shared/src`, consumed by both `apps/api` and `apps/web`.
 
@@ -29,7 +29,7 @@ Reference implementation for every step below: `apps/api/src/accounts/accounts.s
 
 9. **e2e test** — add `apps/api/src/e2e/<resource>.e2e.spec.ts`; must assert cross-tenant access to another family's record 404s (pattern followed by every existing resource).
 
-10. **Validate** — ensure infra is up (`make infra-up`, `make test-db-setup` if not already done), then:
+10. **Validate** — ensure infra is up (`make infra-up` AND `make test-up`, then `make test-db-setup` if not already done — see `run-e2e-tests` skill: e2e specs need both stacks, Postgres from `test-up` and Redis/MinIO from `infra-up`), then:
     ```
     pnpm build && pnpm --filter @gotardo/api test && pnpm --filter @gotardo/api lint && pnpm typecheck
     ```
