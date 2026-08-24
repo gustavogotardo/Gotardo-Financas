@@ -356,6 +356,14 @@ a:hover {
   color: var(--danger);
 }
 
+.stat-warning {
+  color: var(--warning);
+}
+
+.stat-neutral {
+  color: var(--text);
+}
+
 .section {
   margin-bottom: 1.5rem;
 }
@@ -363,6 +371,11 @@ a:hover {
 .section h2 {
   font-size: 1.05rem;
   margin: 0 0 0.75rem;
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
 }
 
 .table {
@@ -488,4 +501,41 @@ a:hover {
   color: var(--muted);
   font-size: 0.9rem;
   padding: 1rem 0;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+  .topbar-inner,
+  .page-head,
+  .section-head,
+  .month-nav {
+    flex-wrap: wrap;
+  }
+
+  .topbar-inner {
+    row-gap: 0.6rem;
+  }
+
+  .page-head {
+    align-items: flex-start;
+    row-gap: 0.75rem;
+  }
+
+  .month-nav {
+    row-gap: 0.5rem;
+    width: 100%;
+  }
+
+  .section-head {
+    row-gap: 0.5rem;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table {
+    min-width: 480px;
+  }
 }

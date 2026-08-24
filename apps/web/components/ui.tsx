@@ -58,7 +58,7 @@ export function StatCard({
 }: {
   label: string;
   value: string;
-  tone?: 'default' | 'success' | 'danger';
+  tone?: 'default' | 'success' | 'danger' | 'warning' | 'neutral';
 }) {
   return (
     <Card className="stat">
