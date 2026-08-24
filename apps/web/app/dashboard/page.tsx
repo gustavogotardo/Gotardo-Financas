@@ -706,7 +706,7 @@ export default function DashboardPage() {
                     variant="ghost"
                     onClick={() => setShowImportForm((show) => !show)}
                   >
-                    {showImportForm ? 'Fechar' : '+ Importar OFX/CSV'}
+                    {showImportForm ? 'Fechar' : '+ Importar extrato'}
                   </Button>
                 ) : null}
               </div>

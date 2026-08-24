@@ -16,9 +16,10 @@ import { PrismaService } from '../prisma/prisma.module';
 import { StorageService } from '../storage/storage.service';
 import { parseCsv, decodeText } from './parsers/csv';
 import { parseOfx } from './parsers/ofx';
+import { parseXlsx } from './parsers/xlsx';
 import { normalizeDescription, type ParsedTransaction } from './parsers/types';
 
-const ALLOWED_EXTENSIONS = new Set(['ofx', 'qfx', 'csv']);
+const ALLOWED_EXTENSIONS = new Set(['ofx', 'qfx', 'csv', 'xlsx']);
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const DOCUMENT_SELECT = {
@@ -106,7 +107,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     }
     const ext = extname(file.originalname).replace('.', '').toLowerCase();
     if (!ALLOWED_EXTENSIONS.has(ext)) {
-      throw new BadRequestException('Formato não suportado (use OFX/QFX ou CSV)');
+      throw new BadRequestException('Formato não suportado (use OFX/QFX, CSV ou XLSX)');
     }
     await this.ensureAccount(user, accountId);
 
@@ -144,7 +145,11 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       const buffer = await this.storage.get(document.storageKey);
       const ext = extname(document.storageKey).replace('.', '').toLowerCase();
       const parsed =
-        ext === 'csv' ? parseCsv(decodeText(buffer)) : parseOfx(decodeText(buffer));
+        ext === 'csv'
+          ? parseCsv(decodeText(buffer))
+          : ext === 'xlsx'
+            ? parseXlsx(buffer)
+            : parseOfx(decodeText(buffer));
 
       const existing = await this.findExistingKeys(familyId, accountId);
       const toCreate = parsed.filter((tx) => !existing.has(this.txKey(tx)));

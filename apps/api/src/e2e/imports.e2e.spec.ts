@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import request from 'supertest';
 import { randomUUID } from 'node:crypto';
+import * as XLSX from 'xlsx';
 import { PrismaModule, PrismaService } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { AccountsModule } from '../accounts/accounts.module';
@@ -50,6 +51,18 @@ VERSION:102
 </STMTTRNRS>
 </BANKMSGSRSV1>
 </OFX>`;
+
+function buildXlsxSample(): Buffer {
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ['data', 'descricao', 'valor'],
+    ['01/08/2026', 'PADARIA CENTRAL', -18.5],
+    ['05/08/2026', 'SALARIO', 3250],
+    ['10/08/2026', 'MERCADO', -120.3],
+  ]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Extrato');
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+}
 
 type TokensResponse = { accessToken: string; refreshToken: string };
 type MeResponse = { id: string; email: string; role: string; familyId: string };
@@ -241,6 +254,43 @@ describe('Importação de extratos (e2e)', () => {
     expect(transactions[0]?.type).toBe('EXPENSE');
     expect(transactions[1]?.externalId).toBe('OFX002');
     expect(transactions[1]?.type).toBe('INCOME');
+  });
+
+  it('importa um XLSX e cria transações PENDING com source IMPORT', async () => {
+    const email = emailFor('imp-xlsx');
+    const reg = await register('Imp XLSX', email, `Família Imp XLSX ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    const family = (meRes.body as MeResponse).familyId;
+    createdFamilies.push(family);
+
+    const account = await createAccount(tokens.accessToken, 'Conta Imp XLSX');
+    const accountId = (account.body as { id: string }).id;
+
+    const upload = await request(app.getHttpServer())
+      .post('/api/v1/imports')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .field('accountId', accountId)
+      .attach('file', buildXlsxSample(), 'extrato.xlsx');
+
+    expect(upload.status).toBe(201);
+    const imported = upload.body as { id: string; status: string; transactionCount: number };
+    expect(imported.status).toBe('PROCESSED');
+    expect(imported.transactionCount).toBe(3);
+
+    const transactions = await prisma.transaction.findMany({
+      where: { documentId: imported.id },
+    });
+    expect(transactions).toHaveLength(3);
+    expect(transactions.every((tx) => tx.status === 'PENDING')).toBe(true);
+    expect(transactions.every((tx) => tx.source === 'IMPORT')).toBe(true);
+    const salario = transactions.find((tx) => tx.description === 'salario');
+    expect(salario?.amount.toString()).toBe('3250');
+    expect(salario?.type).toBe('INCOME');
+    const padaria = transactions.find((tx) => tx.description === 'padaria central');
+    expect(padaria?.amount.toString()).toBe('-18.5');
+    expect(padaria?.type).toBe('EXPENSE');
+    expect(padaria?.date.toISOString().slice(0, 10)).toBe('2026-08-01');
   });
 
   it('rejeita formato não suportado', async () => {
