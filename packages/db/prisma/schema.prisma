@@ -391,6 +391,7 @@ model Notification {
   createdAt DateTime             @default(now())
   readAt    DateTime?
 
+  @@unique([userId, dedupeKey])
   @@index([familyId])
   @@index([userId])
   @@index([dedupeKey])
