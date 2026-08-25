@@ -3,11 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import {
-  apiFetch,
-  type CreateInvitationInput,
-  type FamilyResponse,
-} from '@/lib/api';
+import { apiFetch, type CreateInvitationInput, type FamilyResponse } from '@/lib/api';
 import { roleLabel } from '@/lib/format';
 import { Badge, Button, Card, ErrorBox, Field, Input, Select, Spinner } from '@/components/ui';
 
@@ -139,6 +135,9 @@ export default function FamilyPage() {
             <Button type="button" variant="ghost" onClick={() => router.push('/dashboard')}>
               Dashboard
             </Button>
+            <Button type="button" variant="ghost" onClick={() => router.push('/metas')}>
+              Metas
+            </Button>
             <Button type="button" variant="ghost" onClick={() => void handleLogout()}>
               Sair
             </Button>
@@ -190,13 +189,13 @@ export default function FamilyPage() {
                                 disabled={changingRoleId === member.id}
                                 onChange={(e) => void changeRole(member.id, e.target.value)}
                               >
-                                {ROLES.filter((role) => role !== 'OWNER' || user.role === 'OWNER').map(
-                                  (role) => (
-                                    <option key={role} value={role}>
-                                      {roleLabel(role)}
-                                    </option>
-                                  ),
-                                )}
+                                {ROLES.filter(
+                                  (role) => role !== 'OWNER' || user.role === 'OWNER',
+                                ).map((role) => (
+                                  <option key={role} value={role}>
+                                    {roleLabel(role)}
+                                  </option>
+                                ))}
                               </Select>
                             ) : (
                               <span className="muted">—</span>

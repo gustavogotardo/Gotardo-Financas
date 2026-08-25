@@ -97,6 +97,28 @@ export function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
 }
 
+const GOAL_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Ativa',
+  PAUSED: 'Pausada',
+  COMPLETED: 'Concluída',
+  CANCELLED: 'Cancelada',
+};
+
+export function goalStatusLabel(status: string): string {
+  return GOAL_STATUS_LABELS[status] ?? status;
+}
+
+const GOAL_STRATEGY_LABELS: Record<string, string> = {
+  FIXED: 'Valor fixo',
+  PERCENTAGE: 'Percentual da renda',
+  PROPORTIONAL: 'Proporcional entre metas',
+  OPPORTUNISTIC: 'Quando sobrar',
+};
+
+export function goalStrategyLabel(strategy: string): string {
+  return GOAL_STRATEGY_LABELS[strategy] ?? strategy;
+}
+
 export function statusTone(status: string): string {
   switch (status) {
     case 'CONFIRMED':

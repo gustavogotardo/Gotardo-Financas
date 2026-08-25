@@ -103,6 +103,9 @@ export default function DashboardPage() {
             <Button type="button" variant="ghost" onClick={() => router.push('/familia')}>
               Família
             </Button>
+            <Button type="button" variant="ghost" onClick={() => router.push('/metas')}>
+              Metas
+            </Button>
             <Button type="button" variant="ghost" onClick={() => void handleLogout()}>
               Sair
             </Button>

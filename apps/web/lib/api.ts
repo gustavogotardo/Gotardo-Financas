@@ -188,6 +188,54 @@ export type CreateAllocationInput = {
   note?: string;
 };
 
+export type GoalRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  targetAmount: string;
+  deadline: string | null;
+  priority: number;
+  status: string;
+  monthlyContribution: string | null;
+  strategy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  currentAmount: string;
+  progress: string;
+  monthlyRequired: string | null;
+  predictedCompletionDate: string | null;
+  isAtRisk: boolean;
+};
+
+export type CreateGoalInput = {
+  name: string;
+  description?: string;
+  icon?: string;
+  targetAmount: number;
+  deadline?: string;
+  priority?: 1 | 2 | 3;
+  strategy?: string;
+  monthlyContribution?: number;
+  status?: string;
+};
+
+export type GoalAllocationRecord = {
+  id: string;
+  amount: string;
+  date: string;
+  note: string | null;
+  source: string;
+  createdAt: string;
+};
+
+export type CreateGoalAllocationInput = {
+  amount: number;
+  date?: string;
+  note?: string;
+  source?: string;
+};
+
 export type ImportRecord = {
   id: string;
   originalName: string;
