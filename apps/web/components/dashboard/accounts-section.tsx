@@ -27,8 +27,12 @@ export function AccountsSection({ accounts, canManage, onReload }: Props) {
             type="button"
             variant="ghost"
             onClick={() => {
-              setEditingAccount(null);
-              setShowAccountForm((show) => !show);
+              if (showAccountForm || editingAccount) {
+                setShowAccountForm(false);
+                setEditingAccount(null);
+              } else {
+                setShowAccountForm(true);
+              }
             }}
           >
             {showAccountForm || editingAccount ? 'Fechar' : '+ Nova conta'}
@@ -37,6 +41,7 @@ export function AccountsSection({ accounts, canManage, onReload }: Props) {
       </div>
       {editingAccount ? (
         <AccountForm
+          key={editingAccount.id}
           account={editingAccount}
           onCancel={() => setEditingAccount(null)}
           onDone={async () => {

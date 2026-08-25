@@ -95,11 +95,15 @@ export default function GoalsPage() {
             <Button
               type="button"
               onClick={() => {
-                setEditingGoal(null);
-                setShowGoalForm((show) => !show);
+                if (showGoalForm || editingGoal) {
+                  setShowGoalForm(false);
+                  setEditingGoal(null);
+                } else {
+                  setShowGoalForm(true);
+                }
               }}
             >
-              {showGoalForm ? 'Fechar' : '+ Nova meta'}
+              {showGoalForm || editingGoal ? 'Fechar' : '+ Nova meta'}
             </Button>
           ) : null}
         </div>
@@ -108,6 +112,7 @@ export default function GoalsPage() {
 
         {editingGoal ? (
           <GoalForm
+            key={editingGoal.id}
             goal={editingGoal}
             onCancel={() => setEditingGoal(null)}
             onDone={async () => {
@@ -128,6 +133,7 @@ export default function GoalsPage() {
 
         {allocatingGoal ? (
           <GoalAllocationForm
+            key={allocatingGoal.id}
             goal={allocatingGoal}
             onCancel={() => setAllocatingGoal(null)}
             onDone={async () => {

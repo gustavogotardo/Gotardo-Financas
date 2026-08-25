@@ -27,8 +27,12 @@ export function EnvelopesSection({ envelopes, canManage, onReload }: Props) {
             type="button"
             variant="ghost"
             onClick={() => {
-              setEditingEnvelope(null);
-              setShowEnvelopeForm((show) => !show);
+              if (showEnvelopeForm || editingEnvelope) {
+                setShowEnvelopeForm(false);
+                setEditingEnvelope(null);
+              } else {
+                setShowEnvelopeForm(true);
+              }
             }}
           >
             {showEnvelopeForm || editingEnvelope ? 'Fechar' : '+ Novo envelope'}
@@ -37,6 +41,7 @@ export function EnvelopesSection({ envelopes, canManage, onReload }: Props) {
       </div>
       {editingEnvelope ? (
         <EnvelopeForm
+          key={editingEnvelope.id}
           envelope={editingEnvelope}
           onCancel={() => setEditingEnvelope(null)}
           onDone={async () => {
@@ -56,6 +61,7 @@ export function EnvelopesSection({ envelopes, canManage, onReload }: Props) {
       ) : null}
       {allocatingEnvelope ? (
         <AllocationForm
+          key={allocatingEnvelope.id}
           envelope={allocatingEnvelope}
           onCancel={() => setAllocatingEnvelope(null)}
           onDone={async () => {

@@ -44,8 +44,12 @@ export function CategoriesSection({ categories, canManage, onReload }: Props) {
             type="button"
             variant="ghost"
             onClick={() => {
-              setEditingCategory(null);
-              setShowCategoryForm((show) => !show);
+              if (showCategoryForm || editingCategory) {
+                setShowCategoryForm(false);
+                setEditingCategory(null);
+              } else {
+                setShowCategoryForm(true);
+              }
             }}
           >
             {showCategoryForm || editingCategory ? 'Fechar' : '+ Nova categoria'}
@@ -54,6 +58,7 @@ export function CategoriesSection({ categories, canManage, onReload }: Props) {
       </div>
       {editingCategory ? (
         <CategoryForm
+          key={editingCategory.id}
           category={editingCategory}
           categories={categories}
           onCancel={() => setEditingCategory(null)}
