@@ -26,6 +26,10 @@ export class CreateTransactionDto {
   @IsString()
   envelopeId?: string;
 
+  @IsOptional()
+  @IsString()
+  incomeSourceId?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(300)

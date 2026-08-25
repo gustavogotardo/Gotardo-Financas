@@ -9,6 +9,7 @@ import { PrismaModule, PrismaService } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { AccountsModule } from '../accounts/accounts.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { IncomeSourcesModule } from '../income-sources/income-sources.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { ReportsModule } from '../reports/reports.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -42,7 +43,10 @@ type HealthIndicatorsResponse = {
   commitment: HealthIndicator;
   essentialRatio: HealthIndicator;
   fixedRatio: HealthIndicator;
+  incomeDiversification: HealthIndicator;
 };
+
+type IncomeSourceResponse = { id: string; name: string };
 
 describe('Indicadores de saúde financeira (e2e)', () => {
   let app: INestApplication;
@@ -101,6 +105,14 @@ describe('Indicadores de saúde financeira (e2e)', () => {
       .get('/api/v1/reports/health-indicators')
       .set('Authorization', `Bearer ${token}`);
 
+  const createIncomeSource = async (token: string, name: string): Promise<string> => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/income-sources')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name });
+    return (res.body as IncomeSourceResponse).id;
+  };
+
   /** Start-of-month date, `monthsAgo` calendar months before "now" (0 = current month). */
   const monthDate = (monthsAgo: number, day = 10): Date => {
     const now = new Date();
@@ -115,6 +127,7 @@ describe('Indicadores de saúde financeira (e2e)', () => {
         AuthModule,
         AccountsModule,
         CategoriesModule,
+        IncomeSourcesModule,
         TransactionsModule,
         ReportsModule,
       ],
@@ -136,6 +149,7 @@ describe('Indicadores de saúde financeira (e2e)', () => {
   afterAll(async () => {
     await prisma.$transaction([
       prisma.transaction.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      prisma.incomeSource.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.category.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.notification.deleteMany({ where: { familyId: { in: createdFamilies } } }),
@@ -511,5 +525,120 @@ describe('Indicadores de saúde financeira (e2e)', () => {
     expect(body.fixedRatio.value).toBe('0.0');
     expect(body.fixedRatio.status).toBe('warning');
     expect(body.fixedRatio.trend).toBeNull();
+  });
+
+  it('incomeDiversification é "critical" com valor "0" sem fontes de renda classificadas no mês', async () => {
+    const { token } = await setupFamily('income-diversification-zero');
+    const accountId = await createAccount(token);
+
+    // Receita confirmada no mês, mas sem `incomeSourceId` — não deve contar
+    // como fonte de renda distinta.
+    await createTransaction(token, {
+      accountId,
+      description: 'Salário sem fonte classificada',
+      amount: 3000,
+      type: 'INCOME',
+      date: monthDate(0).toISOString(),
+    });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    expect(body.incomeDiversification.value).toBe('0');
+    expect(body.incomeDiversification.status).toBe('critical');
+    expect(body.incomeDiversification.trend).toBeNull();
+  });
+
+  it('incomeDiversification é "critical" com valor "1" para exatamente uma fonte distinta', async () => {
+    const { token } = await setupFamily('income-diversification-one');
+    const accountId = await createAccount(token);
+    const source = await createIncomeSource(token, 'Salário CLT');
+
+    await createTransaction(token, {
+      accountId,
+      incomeSourceId: source,
+      description: 'Salário',
+      amount: 4000,
+      type: 'INCOME',
+      date: monthDate(0).toISOString(),
+    });
+    // Uma segunda transação da mesma fonte não deve inflar a contagem.
+    await createTransaction(token, {
+      accountId,
+      incomeSourceId: source,
+      description: '13º salário',
+      amount: 4000,
+      type: 'INCOME',
+      date: monthDate(0).toISOString(),
+    });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    expect(body.incomeDiversification.value).toBe('1');
+    expect(body.incomeDiversification.status).toBe('critical');
+  });
+
+  it('incomeDiversification é "warning" com valor "2" para exatamente duas fontes distintas', async () => {
+    const { token } = await setupFamily('income-diversification-two');
+    const accountId = await createAccount(token);
+    const sourceA = await createIncomeSource(token, 'Salário CLT');
+    const sourceB = await createIncomeSource(token, 'Freelance');
+
+    await createTransaction(token, {
+      accountId,
+      incomeSourceId: sourceA,
+      description: 'Salário',
+      amount: 4000,
+      type: 'INCOME',
+      date: monthDate(0).toISOString(),
+    });
+    await createTransaction(token, {
+      accountId,
+      incomeSourceId: sourceB,
+      description: 'Projeto freelance',
+      amount: 1000,
+      type: 'INCOME',
+      date: monthDate(0).toISOString(),
+    });
+    // Receita sem fonte classificada: não deve contar como fonte adicional.
+    await createTransaction(token, {
+      accountId,
+      description: 'Reembolso avulso',
+      amount: 200,
+      type: 'INCOME',
+      date: monthDate(0).toISOString(),
+    });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    expect(body.incomeDiversification.value).toBe('2');
+    expect(body.incomeDiversification.status).toBe('warning');
+  });
+
+  it('incomeDiversification é "good" com valor "3" para três ou mais fontes distintas', async () => {
+    const { token } = await setupFamily('income-diversification-three');
+    const accountId = await createAccount(token);
+    const sourceA = await createIncomeSource(token, 'Salário CLT');
+    const sourceB = await createIncomeSource(token, 'Freelance');
+    const sourceC = await createIncomeSource(token, 'Aluguel de imóvel');
+
+    for (const source of [sourceA, sourceB, sourceC]) {
+      await createTransaction(token, {
+        accountId,
+        incomeSourceId: source,
+        description: 'Receita',
+        amount: 1000,
+        type: 'INCOME',
+        date: monthDate(0).toISOString(),
+      });
+    }
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    expect(body.incomeDiversification.value).toBe('3');
+    expect(body.incomeDiversification.status).toBe('good');
   });
 });

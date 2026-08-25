@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { FamilyModule } from './family/family.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { CategoriesModule } from './categories/categories.module';
+import { IncomeSourcesModule } from './income-sources/income-sources.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { EnvelopesModule } from './envelopes/envelopes.module';
 import { GoalsModule } from './goals/goals.module';
@@ -32,6 +33,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     FamilyModule,
     AccountsModule,
     CategoriesModule,
+    IncomeSourcesModule,
     TransactionsModule,
     EnvelopesModule,
     GoalsModule,

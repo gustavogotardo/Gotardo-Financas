@@ -26,6 +26,10 @@ export class UpdateTransactionDto {
 
   @IsOptional()
   @IsString()
+  incomeSourceId?: string | null;
+
+  @IsOptional()
+  @IsString()
   @MinLength(1)
   @MaxLength(300)
   description?: string;

@@ -33,7 +33,7 @@ export class TransactionsService {
 
   async create(user: AuthUser, dto: CreateTransactionDto): Promise<TransactionRecord> {
     await this.ensureAccount(user, dto.accountId);
-    await this.ensureOptionalRefs(user, dto.categoryId, dto.envelopeId);
+    await this.ensureOptionalRefs(user, dto.categoryId, dto.envelopeId, dto.incomeSourceId);
     const suggestedCategoryId = dto.categoryId
       ? undefined
       : await this.suggester.suggest(user.familyId, dto.description);
@@ -56,6 +56,7 @@ export class TransactionsService {
           categoryId: dto.categoryId,
           suggestedCategoryId,
           envelopeId: dto.envelopeId,
+          incomeSourceId: dto.incomeSourceId,
           description: dto.description,
           amount: dto.amount,
           type,
@@ -101,6 +102,7 @@ export class TransactionsService {
             categoryId: dto.categoryId,
             suggestedCategoryId,
             envelopeId: dto.envelopeId,
+            incomeSourceId: dto.incomeSourceId,
             description: dto.description,
             amount: amounts[i]!,
             type,
@@ -146,6 +148,7 @@ export class TransactionsService {
       user,
       dto.categoryId ?? current.categoryId,
       dto.envelopeId ?? current.envelopeId,
+      dto.incomeSourceId ?? current.incomeSourceId,
     );
     const wasConfirmed = current.status === TransactionStatus.CONFIRMED;
     const willBeConfirmed = nextStatus === TransactionStatus.CONFIRMED;
@@ -178,6 +181,7 @@ export class TransactionsService {
           accountId: dto.accountId,
           categoryId: dto.categoryId,
           envelopeId: dto.envelopeId,
+          incomeSourceId: dto.incomeSourceId,
           date: dto.date,
           type: dto.type,
           status: dto.status,
@@ -233,6 +237,7 @@ export class TransactionsService {
     user: AuthUser,
     categoryId?: string | null,
     envelopeId?: string | null,
+    incomeSourceId?: string | null,
   ): Promise<void> {
     if (categoryId) {
       const category = await this.prisma.category.findFirst({
@@ -248,6 +253,14 @@ export class TransactionsService {
       });
       if (!envelope) {
         throw new NotFoundException('Envelope não encontrado');
+      }
+    }
+    if (incomeSourceId) {
+      const incomeSource = await this.prisma.incomeSource.findFirst({
+        where: { id: incomeSourceId, familyId: user.familyId },
+      });
+      if (!incomeSource) {
+        throw new NotFoundException('Fonte de renda não encontrada');
       }
     }
   }

@@ -99,6 +99,7 @@ export type HealthIndicatorsResponse = {
   commitment: HealthIndicator;
   essentialRatio: HealthIndicator;
   fixedRatio: HealthIndicator;
+  incomeDiversification: HealthIndicator;
 };
 
 const CONFIRMED = TransactionStatus.CONFIRMED;
@@ -360,9 +361,9 @@ export class ReportsService {
 
   /**
    * §2.9 / §27.1 "Indicadores de Saúde" — Taxa de Poupança, Reserva de Emergência,
-   * Comprometimento de Renda, Gasto Essencial/Total e Recorrência/Total. The other 2
-   * indicators from §27.1 (Dívida/Renda, Diversificação de Fontes) are out of scope:
-   * this app has no debt tracking or income-source data to compute them from.
+   * Comprometimento de Renda, Gasto Essencial/Total, Recorrência/Total e
+   * Diversificação de Fontes. The other indicator from §27.1 (Dívida/Renda) is out
+   * of scope: this app has no debt tracking to compute it from.
    */
   async healthIndicators(user: AuthUser): Promise<HealthIndicatorsResponse> {
     const now = new Date();
@@ -389,9 +390,10 @@ export class ReportsService {
       date: { gte: currentMonthStart, lt: currentMonthEnd },
     };
 
-    const [rows, balanceAgg, family, essentialExpenseAgg, fixedExpenseAgg] = await Promise.all([
-      this.prisma.$queryRaw<CashflowRow[]>(
-        Prisma.sql`
+    const [rows, balanceAgg, family, essentialExpenseAgg, fixedExpenseAgg, incomeSourceGroups] =
+      await Promise.all([
+        this.prisma.$queryRaw<CashflowRow[]>(
+          Prisma.sql`
           SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
                  COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
                  COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense
@@ -403,30 +405,45 @@ export class ReportsService {
             AND date < ${windowEnd}
           GROUP BY month
         `,
-      ),
-      // "Saldo total" — same definition as the dashboard's stat card: sum of balance
-      // across active (non-archived, non-deleted) accounts.
-      this.prisma.account.aggregate({
-        where: { familyId: user.familyId, deletedAt: null, isArchived: false },
-        _sum: { balance: true },
-      }),
-      this.prisma.family.findUniqueOrThrow({
-        where: { id: user.familyId },
-        select: { createdAt: true },
-      }),
-      // Gasto Essencial/Total (§27.1): soma das despesas do mês corrente cuja
-      // categoria está marcada como essencial. Transações sem categoria, ou com
-      // categoria não-essencial, não entram nessa soma (mas entram no total).
-      this.prisma.transaction.aggregate({
-        where: { ...currentMonthExpenseWhere, category: { isEssential: true } },
-        _sum: { amount: true },
-      }),
-      // Recorrência/Total (§27.1): mesma lógica, para categorias fixas.
-      this.prisma.transaction.aggregate({
-        where: { ...currentMonthExpenseWhere, category: { isFixed: true } },
-        _sum: { amount: true },
-      }),
-    ]);
+        ),
+        // "Saldo total" — same definition as the dashboard's stat card: sum of balance
+        // across active (non-archived, non-deleted) accounts.
+        this.prisma.account.aggregate({
+          where: { familyId: user.familyId, deletedAt: null, isArchived: false },
+          _sum: { balance: true },
+        }),
+        this.prisma.family.findUniqueOrThrow({
+          where: { id: user.familyId },
+          select: { createdAt: true },
+        }),
+        // Gasto Essencial/Total (§27.1): soma das despesas do mês corrente cuja
+        // categoria está marcada como essencial. Transações sem categoria, ou com
+        // categoria não-essencial, não entram nessa soma (mas entram no total).
+        this.prisma.transaction.aggregate({
+          where: { ...currentMonthExpenseWhere, category: { isEssential: true } },
+          _sum: { amount: true },
+        }),
+        // Recorrência/Total (§27.1): mesma lógica, para categorias fixas.
+        this.prisma.transaction.aggregate({
+          where: { ...currentMonthExpenseWhere, category: { isFixed: true } },
+          _sum: { amount: true },
+        }),
+        // Diversificação de Fontes (§27.1): quantidade de fontes de renda
+        // distintas com receita confirmada no mês corrente. Uma transação sem
+        // `incomeSourceId` não conta pra nenhuma fonte; um `IncomeSource`
+        // cadastrado mas sem receita esse mês também não conta.
+        this.prisma.transaction.groupBy({
+          by: ['incomeSourceId'],
+          where: {
+            familyId: user.familyId,
+            deletedAt: null,
+            status: CONFIRMED,
+            type: TransactionType.INCOME,
+            incomeSourceId: { not: null },
+            date: { gte: currentMonthStart, lt: currentMonthEnd },
+          },
+        }),
+      ]);
 
     const byMonth = new Map(rows.map((row) => [row.month, row]));
     const currentRow = byMonth.get(this.monthKey(currentMonthStart));
@@ -467,6 +484,7 @@ export class ReportsService {
       commitment: this.buildCommitment(avgExpense, avgIncome),
       essentialRatio: this.buildEssentialRatio(essentialExpense, currentExpense),
       fixedRatio: this.buildFixedRatio(fixedExpense, currentExpense),
+      incomeDiversification: this.buildIncomeDiversification(incomeSourceGroups.length),
     };
   }
 
@@ -564,6 +582,17 @@ export class ReportsService {
     totalExpense: Prisma.Decimal,
   ): HealthIndicator {
     return this.buildLowerIsBetterRatio(fixedExpense, totalExpense, 50, 70);
+  }
+
+  /**
+   * Diversificação de Fontes (§27.1) — quantidade de fontes de renda distintas
+   * com receita confirmada no mês corrente. Higher is better: depender de uma
+   * única fonte (ou nenhuma) é um risco de renda maior do que ter várias.
+   * `value` é uma contagem inteira, não uma razão — sem casas decimais.
+   */
+  private buildIncomeDiversification(distinctSourceCount: number): HealthIndicator {
+    const status = this.higherIsBetterStatus(new Prisma.Decimal(distinctSourceCount), 3, 2);
+    return { value: String(distinctSourceCount), status, trend: null };
   }
 
   /** Higher is better: >= good → 'good', < critical → 'critical', else 'warning'. */
