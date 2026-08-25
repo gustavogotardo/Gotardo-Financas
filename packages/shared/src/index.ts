@@ -59,6 +59,22 @@ export enum AllocationSource {
   AUTO = 'AUTO',
 }
 
+export enum NotificationType {
+  BUDGET_EXCEEDED = 'BUDGET_EXCEEDED',
+  ANOMALY_DETECTED = 'ANOMALY_DETECTED',
+  GOAL_AT_RISK = 'GOAL_AT_RISK',
+  DUPLICATE_DETECTED = 'DUPLICATE_DETECTED',
+  DOCUMENT_PENDING = 'DOCUMENT_PENDING',
+  ACCOUNT_DUE = 'ACCOUNT_DUE',
+  RECURRING_GENERATED = 'RECURRING_GENERATED',
+}
+
+export enum NotificationSeverity {
+  INFO = 'INFO',
+  WARNING = 'WARNING',
+  CRITICAL = 'CRITICAL',
+}
+
 export type ApiError = {
   code: ErrorCode;
   message: string;

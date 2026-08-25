@@ -90,6 +90,22 @@ enum AllocationSource {
   AUTO
 }
 
+enum NotificationType {
+  BUDGET_EXCEEDED
+  ANOMALY_DETECTED
+  GOAL_AT_RISK
+  DUPLICATE_DETECTED
+  DOCUMENT_PENDING
+  ACCOUNT_DUE
+  RECURRING_GENERATED
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
 // --- Tenant (isolamento por família) ---
 
 model Family {
@@ -105,21 +121,24 @@ model Family {
   recurringRules RecurringRule[]
   invitations    Invitation[]
   financialGoals FinancialGoal[]
+  notifications  Notification[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String
-  passwordHash  String
-  role          FamilyRole     @default(MEMBER)
-  familyId      String
-  family        Family         @relation(fields: [familyId], references: [id])
-  refreshTokens RefreshToken[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                     String             @id @default(cuid())
+  email                  String             @unique
+  name                   String
+  passwordHash           String
+  role                   FamilyRole         @default(MEMBER)
+  familyId               String
+  family                 Family             @relation(fields: [familyId], references: [id])
+  refreshTokens          RefreshToken[]
+  notifications          Notification[]
+  mutedNotificationTypes NotificationType[] @default([])
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
   @@index([familyId])
 }
@@ -351,4 +370,28 @@ model RecurringRule {
 
   @@index([familyId])
   @@index([accountId])
+}
+
+// --- Notificações e alertas ---
+
+model Notification {
+  id        String               @id @default(cuid())
+  familyId  String
+  family    Family               @relation(fields: [familyId], references: [id])
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  message   String
+  severity  NotificationSeverity @default(INFO)
+  isRead    Boolean              @default(false)
+  actionUrl String?
+  metadata  Json?
+  dedupeKey String
+  createdAt DateTime             @default(now())
+  readAt    DateTime?
+
+  @@index([familyId])
+  @@index([userId])
+  @@index([dedupeKey])
 }
