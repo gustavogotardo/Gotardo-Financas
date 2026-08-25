@@ -120,7 +120,7 @@ export class AuthService {
 
   async acceptInvitation(dto: AcceptInvitationDto): Promise<AuthTokens> {
     const invitation = await this.prisma.invitation.findUnique({
-      where: { token: dto.token },
+      where: { tokenHash: sha256(dto.token) },
     });
     if (!invitation) {
       throw new UnauthorizedException('Convite inválido');

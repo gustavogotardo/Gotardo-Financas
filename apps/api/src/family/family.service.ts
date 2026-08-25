@@ -7,7 +7,7 @@ import {
 import { FamilyRole } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import type { AuthUser } from '../common/auth-user';
-import { randomToken } from '../common/tokens';
+import { randomToken, sha256 } from '../common/tokens';
 import type { CreateInvitationDto } from './dto/create-invitation.dto';
 import type { ChangeRoleDto } from './dto/change-role.dto';
 
@@ -70,7 +70,7 @@ export class FamilyService {
         familyId: user.familyId,
         email,
         role,
-        token,
+        tokenHash: sha256(token),
         createdBy: user.id,
         expiresAt: new Date(Date.now() + INVITATION_EXPIRY_MS),
       },

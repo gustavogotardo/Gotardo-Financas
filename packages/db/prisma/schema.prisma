@@ -125,7 +125,7 @@ model Invitation {
   family     Family     @relation(fields: [familyId], references: [id])
   email      String
   role       FamilyRole @default(MEMBER)
-  token      String     @unique
+  tokenHash  String     @unique
   createdBy  String
   expiresAt  DateTime
   acceptedAt DateTime?
