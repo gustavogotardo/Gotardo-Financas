@@ -204,6 +204,8 @@ model Category {
   family                Family          @relation(fields: [familyId], references: [id])
   name                  String
   icon                  String?
+  isEssential           Boolean         @default(false)
+  isFixed               Boolean         @default(false)
   parentId              String?
   parent                Category?       @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children              Category[]      @relation("CategoryHierarchy")
