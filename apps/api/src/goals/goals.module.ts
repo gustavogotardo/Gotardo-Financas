@@ -5,5 +5,6 @@ import { GoalsController } from './goals.controller';
 @Module({
   controllers: [GoalsController],
   providers: [GoalsService],
+  exports: [GoalsService],
 })
 export class GoalsModule {}

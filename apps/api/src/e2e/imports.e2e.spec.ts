@@ -126,6 +126,9 @@ describe('Importação de extratos (e2e)', () => {
       prisma.transaction.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.document.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      // Ver comentário equivalente em goals.e2e.spec.ts: o checker global de
+      // notificações (E3.2) pode ter criado notificações para estes usuários.
+      prisma.notification.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.refreshToken.deleteMany({
         where: { user: { familyId: { in: createdFamilies } } },
       }),

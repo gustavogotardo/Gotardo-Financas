@@ -150,6 +150,11 @@ describe('Metas e objetivos (e2e)', () => {
         where: { goal: { familyId: { in: createdFamilies } } },
       }),
       prisma.financialGoal.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      // O checker periódico de notificações (E3.2) roda de forma global sobre
+      // todas as famílias do banco de testes; como outros specs e2e podem
+      // acionar `runChecks()` enquanto esta suíte ainda tem famílias vivas,
+      // suas notificações precisam ser limpas aqui antes de apagar os users.
+      prisma.notification.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.refreshToken.deleteMany({
         where: { user: { familyId: { in: createdFamilies } } },
       }),

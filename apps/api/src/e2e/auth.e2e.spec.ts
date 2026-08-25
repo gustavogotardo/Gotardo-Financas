@@ -89,6 +89,9 @@ describe('Auth e isolamento de tenant (e2e)', () => {
       await prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.category.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.invitation.deleteMany({ where: { familyId: { in: createdFamilies } } });
+      // Ver comentário equivalente em goals.e2e.spec.ts: o checker global de
+      // notificações (E3.2) pode ter criado notificações para estes usuários.
+      await prisma.notification.deleteMany({ where: { familyId: { in: createdFamilies } } });
       await prisma.refreshToken.deleteMany({
         where: { user: { familyId: { in: createdFamilies } } },
       });
