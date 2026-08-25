@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth';
 import { apiFetch, type CreateInvitationInput, type FamilyResponse } from '@/lib/api';
 import { roleLabel } from '@/lib/format';
 import { Badge, Button, Card, ErrorBox, Field, Input, Select, Spinner } from '@/components/ui';
+import { NotificationBell } from '@/components/notification-bell';
 
 const ROLES = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 
@@ -138,6 +139,7 @@ export default function FamilyPage() {
             <Button type="button" variant="ghost" onClick={() => router.push('/metas')}>
               Metas
             </Button>
+            <NotificationBell />
             <Button type="button" variant="ghost" onClick={() => void handleLogout()}>
               Sair
             </Button>

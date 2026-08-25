@@ -277,6 +277,26 @@ export type CreateInvitationInput = {
   role?: string;
 };
 
+export type NotificationRecord = {
+  id: string;
+  familyId: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  isRead: boolean;
+  actionUrl: string | null;
+  metadata: unknown;
+  dedupeKey: string;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export type NotificationPreferences = {
+  mutedNotificationTypes: string[];
+};
+
 export function getAccountInvoice(accountId: string, period?: string): Promise<AccountInvoice> {
   return apiFetch<AccountInvoice>(
     `/api/v1/accounts/${accountId}/invoice${period ? `?period=${period}` : ''}`,

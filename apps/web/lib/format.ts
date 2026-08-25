@@ -133,6 +133,20 @@ export function goalStrategyLabel(strategy: string): string {
   return GOAL_STRATEGY_LABELS[strategy] ?? strategy;
 }
 
+const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  BUDGET_EXCEEDED: 'Orçamento estourado',
+  ANOMALY_DETECTED: 'Despesa fora do padrão',
+  GOAL_AT_RISK: 'Meta em risco',
+  DUPLICATE_DETECTED: 'Possível duplicata',
+  DOCUMENT_PENDING: 'Importação pendente',
+  ACCOUNT_DUE: 'Fatura vencendo',
+  RECURRING_GENERATED: 'Recorrência gerada',
+};
+
+export function notificationTypeLabel(type: string): string {
+  return NOTIFICATION_TYPE_LABELS[type] ?? type;
+}
+
 export function statusTone(status: string): string {
   switch (status) {
     case 'CONFIRMED':

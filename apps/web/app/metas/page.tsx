@@ -8,6 +8,7 @@ import { brl, formatDate, goalStatusLabel } from '@/lib/format';
 import { Badge, Button, Card, ErrorBox, Spinner } from '@/components/ui';
 import { GoalForm } from '@/components/goal-form';
 import { GoalAllocationForm } from '@/components/goal-allocation-form';
+import { NotificationBell } from '@/components/notification-bell';
 
 function goalStatusTone(status: string): 'success' | 'warning' | 'danger' | 'info' {
   switch (status) {
@@ -79,6 +80,7 @@ export default function GoalsPage() {
             <Button type="button" variant="ghost" onClick={() => router.push('/familia')}>
               Família
             </Button>
+            <NotificationBell />
             <Button type="button" variant="ghost" onClick={() => void handleLogout()}>
               Sair
             </Button>

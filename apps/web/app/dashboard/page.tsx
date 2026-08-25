@@ -15,6 +15,7 @@ import { CategoryChart } from '@/components/dashboard/category-chart';
 import { EnvelopesSection } from '@/components/dashboard/envelopes-section';
 import { ImportsSection } from '@/components/dashboard/imports-section';
 import { TransactionsSection } from '@/components/dashboard/transactions-section';
+import { NotificationBell } from '@/components/notification-bell';
 
 const MONTH_FORMAT = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
 
@@ -106,6 +107,7 @@ export default function DashboardPage() {
             <Button type="button" variant="ghost" onClick={() => router.push('/metas')}>
               Metas
             </Button>
+            <NotificationBell />
             <Button type="button" variant="ghost" onClick={() => void handleLogout()}>
               Sair
             </Button>
