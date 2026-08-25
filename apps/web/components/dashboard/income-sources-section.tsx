@@ -25,8 +25,12 @@ export function IncomeSourcesSection({ incomeSources, canManage, onReload }: Pro
             type="button"
             variant="ghost"
             onClick={() => {
-              setEditingIncomeSource(null);
-              setShowIncomeSourceForm((show) => !show);
+              if (showIncomeSourceForm || editingIncomeSource) {
+                setShowIncomeSourceForm(false);
+                setEditingIncomeSource(null);
+              } else {
+                setShowIncomeSourceForm(true);
+              }
             }}
           >
             {showIncomeSourceForm || editingIncomeSource ? 'Fechar' : '+ Nova fonte'}
@@ -35,6 +39,7 @@ export function IncomeSourcesSection({ incomeSources, canManage, onReload }: Pro
       </div>
       {editingIncomeSource ? (
         <IncomeSourceForm
+          key={editingIncomeSource.id}
           incomeSource={editingIncomeSource}
           onCancel={() => setEditingIncomeSource(null)}
           onDone={async () => {

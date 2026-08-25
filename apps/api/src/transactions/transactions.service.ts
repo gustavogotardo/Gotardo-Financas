@@ -155,9 +155,10 @@ export class TransactionsService {
     const oldDelta = this.balanceDelta(current.type, new Prisma.Decimal(Number(current.amount)));
     const newDelta = this.balanceDelta(nextType, nextAmount);
 
-    // Campos compartilhados de parcelamento: description/categoryId/envelopeId/paymentMethod
-    // propagam para as parcelas irmãs PENDING (amount/date/status/type/accountId são
-    // legitimamente por parcela e nunca propagam).
+    // Campos compartilhados de parcelamento: description/categoryId/envelopeId/
+    // incomeSourceId/paymentMethod propagam para as parcelas irmãs PENDING
+    // (amount/date/status/type/accountId são legitimamente por parcela e nunca
+    // propagam).
     const sharedChanges: Prisma.TransactionUncheckedUpdateManyInput = {};
     if (dto.description !== undefined) {
       sharedChanges.description = dto.description;
@@ -167,6 +168,9 @@ export class TransactionsService {
     }
     if (dto.envelopeId !== undefined) {
       sharedChanges.envelopeId = dto.envelopeId;
+    }
+    if (dto.incomeSourceId !== undefined) {
+      sharedChanges.incomeSourceId = dto.incomeSourceId;
     }
     if (dto.paymentMethod !== undefined) {
       sharedChanges.paymentMethod = dto.paymentMethod;
