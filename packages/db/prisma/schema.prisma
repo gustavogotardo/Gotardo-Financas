@@ -71,6 +71,25 @@ enum PaymentMethod {
   OTHER
 }
 
+enum GoalStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum GoalStrategy {
+  FIXED
+  PERCENTAGE
+  PROPORTIONAL
+  OPPORTUNISTIC
+}
+
+enum AllocationSource {
+  MANUAL
+  AUTO
+}
+
 // --- Tenant (isolamento por família) ---
 
 model Family {
@@ -85,6 +104,7 @@ model Family {
   documents      Document[]
   recurringRules RecurringRule[]
   invitations    Invitation[]
+  financialGoals FinancialGoal[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -208,6 +228,42 @@ model EnvelopeAllocation {
   createdAt  DateTime @default(now())
 
   @@index([envelopeId])
+}
+
+// --- Metas e objetivos financeiros ---
+
+model FinancialGoal {
+  id                  String                    @id @default(cuid())
+  familyId            String
+  family              Family                    @relation(fields: [familyId], references: [id])
+  name                String
+  description         String?
+  icon                String?
+  targetAmount        Decimal                   @db.Decimal(12, 2)
+  deadline            DateTime?
+  priority            Int                       @default(2)
+  status              GoalStatus                @default(ACTIVE)
+  monthlyContribution Decimal?                  @db.Decimal(12, 2)
+  strategy            GoalStrategy?
+  allocations         FinancialGoalAllocation[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  deletedAt           DateTime?
+
+  @@index([familyId])
+}
+
+model FinancialGoalAllocation {
+  id        String           @id @default(cuid())
+  goalId    String
+  goal      FinancialGoal    @relation(fields: [goalId], references: [id])
+  amount    Decimal          @db.Decimal(12, 2)
+  date      DateTime
+  note      String?
+  source    AllocationSource @default(MANUAL)
+  createdAt DateTime         @default(now())
+
+  @@index([goalId])
 }
 
 // --- Transações ---

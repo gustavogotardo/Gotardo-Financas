@@ -40,6 +40,25 @@ export enum Currency {
   BRL = 'BRL',
 }
 
+export enum GoalStatus {
+  ACTIVE = 'ACTIVE',
+  PAUSED = 'PAUSED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum GoalStrategy {
+  FIXED = 'FIXED',
+  PERCENTAGE = 'PERCENTAGE',
+  PROPORTIONAL = 'PROPORTIONAL',
+  OPPORTUNISTIC = 'OPPORTUNISTIC',
+}
+
+export enum AllocationSource {
+  MANUAL = 'MANUAL',
+  AUTO = 'AUTO',
+}
+
 export type ApiError = {
   code: ErrorCode;
   message: string;
