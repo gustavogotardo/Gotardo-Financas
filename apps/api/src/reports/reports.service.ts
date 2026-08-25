@@ -374,14 +374,12 @@ export class ReportsService {
     /**
      * Trailing 3 calendar months = the current (possibly partial) month plus the two
      * full calendar months before it. E.g. on any day in 2026-08 the window is
-     * [2026-06-01, 2026-09-01). Averages always divide by a fixed denominator of 3,
-     * regardless of whether every month in the window has transactions (a month with
-     * no confirmed transactions simply contributes R$ 0 to the sum).
+     * [2026-06-01, 2026-09-01).
      */
     const windowStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
     const windowEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-    const [rows, balanceAgg] = await Promise.all([
+    const [rows, balanceAgg, family] = await Promise.all([
       this.prisma.$queryRaw<CashflowRow[]>(
         Prisma.sql`
           SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
@@ -402,6 +400,10 @@ export class ReportsService {
         where: { familyId: user.familyId, deletedAt: null, isArchived: false },
         _sum: { balance: true },
       }),
+      this.prisma.family.findUniqueOrThrow({
+        where: { id: user.familyId },
+        select: { createdAt: true },
+      }),
     ]);
 
     const byMonth = new Map(rows.map((row) => [row.month, row]));
@@ -411,10 +413,26 @@ export class ReportsService {
     const currentIncome = currentRow?.income ?? new Prisma.Decimal(0);
     const currentExpense = currentRow?.expense ?? new Prisma.Decimal(0);
 
+    // Divide pelo número de meses do período que a família de fato já
+    // existia, não sempre por 3 — senão uma família nova (poucas semanas de
+    // histórico) tem a média artificialmente diluída por meses "vazios"
+    // anteriores à sua criação, subestimando despesa/receita médias (e, no
+    // caso da reserva de emergência, superestimando os meses de cobertura).
+    const familyCreatedMonthStart = new Date(
+      Date.UTC(family.createdAt.getUTCFullYear(), family.createdAt.getUTCMonth(), 1),
+    );
+    const effectiveWindowStart =
+      familyCreatedMonthStart > windowStart ? familyCreatedMonthStart : windowStart;
+    const monthsInWindow = Math.max(
+      1,
+      (windowEnd.getUTCFullYear() - effectiveWindowStart.getUTCFullYear()) * 12 +
+        (windowEnd.getUTCMonth() - effectiveWindowStart.getUTCMonth()),
+    );
+
     const totalIncome3 = rows.reduce((acc, row) => acc.plus(row.income), new Prisma.Decimal(0));
     const totalExpense3 = rows.reduce((acc, row) => acc.plus(row.expense), new Prisma.Decimal(0));
-    const avgIncome = totalIncome3.dividedBy(3);
-    const avgExpense = totalExpense3.dividedBy(3);
+    const avgIncome = totalIncome3.dividedBy(monthsInWindow);
+    const avgExpense = totalExpense3.dividedBy(monthsInWindow);
 
     const totalBalance = balanceAgg._sum.balance ?? new Prisma.Decimal(0);
 

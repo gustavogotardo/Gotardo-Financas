@@ -181,8 +181,13 @@ describe('Indicadores de saúde financeira (e2e)', () => {
   });
 
   it('calcula reserva de emergência e comprometimento de renda com dados de 3 meses', async () => {
-    const { token } = await setupFamily('trailing-3-months');
+    const { token, familyId } = await setupFamily('trailing-3-months');
     const accountId = await createAccount(token);
+    // A família precisa "existir" desde antes da janela de 3 meses, senão o
+    // divisor da média é clampado ao número de meses desde a criação (ver
+    // reports.service.ts) em vez de 3, o que este teste depende para os
+    // valores esperados abaixo.
+    await prisma.family.update({ where: { id: familyId }, data: { createdAt: monthDate(2) } });
 
     // Trailing 3-month window: current month + the 2 before it.
     // Income: 3000 in each of the 3 months = avg 3000.
@@ -219,6 +224,32 @@ describe('Indicadores de saúde financeira (e2e)', () => {
     expect(body.commitment.value).toBe('33.3');
     expect(body.commitment.status).toBe('good');
     expect(body.commitment.trend).toBeNull();
+  });
+
+  it('não dilui a média para família nova com menos de 3 meses de histórico', async () => {
+    const { token } = await setupFamily('new-family-short-history');
+    const accountId = await createAccount(token);
+    // Família criada "agora" (padrão do registro) — só o mês corrente tem
+    // dado. Sem o clamp do divisor pelo tempo de existência da família, a
+    // média seria diluída por 3 (incluindo meses "vazios" anteriores à
+    // criação), inflando artificialmente a reserva de emergência.
+    await createTransaction(token, {
+      accountId,
+      description: 'Aluguel',
+      amount: 3000,
+      type: 'EXPENSE',
+      date: monthDate(0).toISOString(),
+    });
+
+    const account = await prisma.account.findFirst({ where: { id: accountId } });
+    expect(account?.balance.toString()).toBe('-3000');
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    // saldo (-3000) / despesa média (3000, dividido por 1 mês, não 3) = -1.0 mês -> critical
+    expect(body.emergencyReserve.value).toBe('-1.0');
+    expect(body.emergencyReserve.status).toBe('critical');
   });
 
   it('não quebra quando não há receita (divisão por zero) e retorna resposta neutra', async () => {

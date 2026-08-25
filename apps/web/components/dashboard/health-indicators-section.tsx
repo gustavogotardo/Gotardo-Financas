@@ -20,7 +20,12 @@ function formatIndicatorValue(indicator: HealthIndicator, suffix: string): strin
   return `${indicator.value}${suffix}`;
 }
 
-export function HealthIndicatorsSection() {
+type Props = {
+  /** Bumped by the parent whenever dashboard data reloads, to trigger a refetch here too. */
+  refreshToken?: number;
+};
+
+export function HealthIndicatorsSection({ refreshToken }: Props) {
   const [indicators, setIndicators] = useState<HealthIndicatorsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +49,7 @@ export function HealthIndicatorsSection() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshToken]);
 
   return (
     <section className="section">

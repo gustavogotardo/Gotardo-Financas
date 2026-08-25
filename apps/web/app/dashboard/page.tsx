@@ -80,7 +80,9 @@ export default function DashboardPage() {
   }
 
   const totalBalance =
-    data?.accounts.reduce((acc, account) => acc + Number(account.balance), 0) ?? 0;
+    data?.accounts
+      .filter((account) => !account.isArchived)
+      .reduce((acc, account) => acc + Number(account.balance), 0) ?? 0;
   const income = data ? Number(data.cashflow.income) : 0;
   const expense = data ? Number(data.cashflow.expense) : 0;
   const net = income - expense;
@@ -175,7 +177,7 @@ export default function DashboardPage() {
               />
             </div>
 
-            <HealthIndicatorsSection />
+            <HealthIndicatorsSection refreshToken={version} />
 
             <CashflowChart refreshToken={version} />
 
