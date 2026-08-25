@@ -297,6 +297,18 @@ export type NotificationPreferences = {
   mutedNotificationTypes: string[];
 };
 
+export type HealthIndicator = {
+  value: string;
+  status: 'good' | 'warning' | 'critical';
+  trend: 'up' | 'down' | 'stable' | null;
+};
+
+export type HealthIndicatorsResponse = {
+  savingsRate: HealthIndicator;
+  emergencyReserve: HealthIndicator;
+  commitment: HealthIndicator;
+};
+
 export function getAccountInvoice(accountId: string, period?: string): Promise<AccountInvoice> {
   return apiFetch<AccountInvoice>(
     `/api/v1/accounts/${accountId}/invoice${period ? `?period=${period}` : ''}`,

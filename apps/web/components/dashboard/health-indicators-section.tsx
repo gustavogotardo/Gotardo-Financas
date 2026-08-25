@@ -1,0 +1,85 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { apiFetch, type HealthIndicator, type HealthIndicatorsResponse } from '@/lib/api';
+import { Card, ErrorBox, Spinner, StatCard } from '@/components/ui';
+
+const STATUS_TONE: Record<HealthIndicator['status'], 'success' | 'warning' | 'danger'> = {
+  good: 'success',
+  warning: 'warning',
+  critical: 'danger',
+};
+
+const TREND_ARROW: Record<NonNullable<HealthIndicator['trend']>, string> = {
+  up: '↑',
+  down: '↓',
+  stable: '→',
+};
+
+function formatIndicatorValue(indicator: HealthIndicator, suffix: string): string {
+  return `${indicator.value}${suffix}`;
+}
+
+export function HealthIndicatorsSection() {
+  const [indicators, setIndicators] = useState<HealthIndicatorsResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    apiFetch<HealthIndicatorsResponse>('/api/v1/reports/health-indicators')
+      .then((result) => {
+        if (!cancelled) setIndicators(result);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Falha ao carregar a saúde financeira.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section className="section">
+      <div className="section-head">
+        <h2>Saúde financeira</h2>
+      </div>
+      <Card>
+        {error ? <ErrorBox>{error}</ErrorBox> : null}
+        {loading ? (
+          <Spinner />
+        ) : !indicators ? null : (
+          <div className="stat-grid">
+            <StatCard
+              label="Taxa de poupança"
+              value={
+                formatIndicatorValue(indicators.savingsRate, '%') +
+                (indicators.savingsRate.trend
+                  ? ` ${TREND_ARROW[indicators.savingsRate.trend]}`
+                  : '')
+              }
+              tone={STATUS_TONE[indicators.savingsRate.status]}
+            />
+            <StatCard
+              label="Reserva de emergência"
+              value={formatIndicatorValue(indicators.emergencyReserve, ' meses')}
+              tone={STATUS_TONE[indicators.emergencyReserve.status]}
+            />
+            <StatCard
+              label="Comprometimento de renda"
+              value={formatIndicatorValue(indicators.commitment, '%')}
+              tone={STATUS_TONE[indicators.commitment.status]}
+            />
+          </div>
+        )}
+      </Card>
+    </section>
+  );
+}

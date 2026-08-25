@@ -13,6 +13,7 @@ import { CashflowChart } from '@/components/dashboard/cashflow-chart';
 import { CategoriesSection } from '@/components/dashboard/categories-section';
 import { CategoryChart } from '@/components/dashboard/category-chart';
 import { EnvelopesSection } from '@/components/dashboard/envelopes-section';
+import { HealthIndicatorsSection } from '@/components/dashboard/health-indicators-section';
 import { ImportsSection } from '@/components/dashboard/imports-section';
 import { TransactionsSection } from '@/components/dashboard/transactions-section';
 import { NotificationBell } from '@/components/notification-bell';
@@ -83,7 +84,6 @@ export default function DashboardPage() {
   const income = data ? Number(data.cashflow.income) : 0;
   const expense = data ? Number(data.cashflow.expense) : 0;
   const net = income - expense;
-  const savingsRate = income > 0 ? ((income - expense) / income) * 100 : expense > 0 ? -100 : 0;
 
   async function handleLogout() {
     await logout();
@@ -169,16 +169,13 @@ export default function DashboardPage() {
                 tone={net >= 0 ? 'success' : 'danger'}
               />
               <StatCard
-                label="Taxa de economia"
-                value={`${savingsRate.toFixed(0)}%`}
-                tone={savingsRate >= 0 ? 'success' : 'danger'}
-              />
-              <StatCard
                 label="Transações pendentes"
                 value={String(pendingCount)}
                 tone={pendingCount > 0 ? 'warning' : 'neutral'}
               />
             </div>
+
+            <HealthIndicatorsSection />
 
             <CashflowChart refreshToken={version} />
 
