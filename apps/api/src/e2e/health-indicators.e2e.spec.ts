@@ -378,6 +378,26 @@ describe('Indicadores de saúde financeira (e2e)', () => {
     expect(patched.isFixed).toBe(true);
   });
 
+  it('trata isEssential/isFixed nulos como "não informado" em vez de quebrar (colunas NOT NULL)', async () => {
+    const { token } = await setupFamily('category-null-flags');
+
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Transporte', isEssential: null, isFixed: null });
+    expect(created.status).toBe(201);
+    const category = created.body as CategoryResponse;
+    expect(category.isEssential).toBe(false);
+    expect(category.isFixed).toBe(false);
+
+    const patched = await request(app.getHttpServer())
+      .patch(`/api/v1/categories/${category.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ isEssential: null });
+    expect(patched.status).toBe(200);
+    expect((patched.body as CategoryResponse).isEssential).toBe(false);
+  });
+
   it('calcula essentialRatio e fixedRatio ignorando categorias não classificadas no numerador', async () => {
     const { token } = await setupFamily('essential-fixed-ratio');
     const accountId = await createAccount(token);

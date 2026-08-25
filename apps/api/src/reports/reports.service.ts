@@ -518,13 +518,28 @@ export class ReportsService {
     return { value: months.toFixed(1), status, trend: null };
   }
 
-  private buildCommitment(avgExpense: Prisma.Decimal, avgIncome: Prisma.Decimal): HealthIndicator {
-    if (avgIncome.lessThanOrEqualTo(0)) {
+  /**
+   * Constrói um indicador "lower is better" — comprometimento de renda,
+   * gasto essencial/total e recorrência/total (§27.1) são todos a mesma
+   * forma (numerador / denominador × 100, quanto menor melhor), diferindo
+   * só nos limiares de bom/crítico.
+   */
+  private buildLowerIsBetterRatio(
+    numerator: Prisma.Decimal,
+    denominator: Prisma.Decimal,
+    goodThreshold: number,
+    criticalThreshold: number,
+  ): HealthIndicator {
+    if (denominator.lessThanOrEqualTo(0)) {
       return { value: '0.0', status: 'warning', trend: null };
     }
-    const ratio = avgExpense.dividedBy(avgIncome).times(100);
-    const status = this.lowerIsBetterStatus(ratio, 50, 70);
+    const ratio = numerator.dividedBy(denominator).times(100);
+    const status = this.lowerIsBetterStatus(ratio, goodThreshold, criticalThreshold);
     return { value: ratio.toFixed(1), status, trend: null };
+  }
+
+  private buildCommitment(avgExpense: Prisma.Decimal, avgIncome: Prisma.Decimal): HealthIndicator {
+    return this.buildLowerIsBetterRatio(avgExpense, avgIncome, 50, 70);
   }
 
   /**
@@ -537,12 +552,7 @@ export class ReportsService {
     essentialExpense: Prisma.Decimal,
     totalExpense: Prisma.Decimal,
   ): HealthIndicator {
-    if (totalExpense.lessThanOrEqualTo(0)) {
-      return { value: '0.0', status: 'warning', trend: null };
-    }
-    const ratio = essentialExpense.dividedBy(totalExpense).times(100);
-    const status = this.lowerIsBetterStatus(ratio, 60, 80);
-    return { value: ratio.toFixed(1), status, trend: null };
+    return this.buildLowerIsBetterRatio(essentialExpense, totalExpense, 60, 80);
   }
 
   /**
@@ -553,12 +563,7 @@ export class ReportsService {
     fixedExpense: Prisma.Decimal,
     totalExpense: Prisma.Decimal,
   ): HealthIndicator {
-    if (totalExpense.lessThanOrEqualTo(0)) {
-      return { value: '0.0', status: 'warning', trend: null };
-    }
-    const ratio = fixedExpense.dividedBy(totalExpense).times(100);
-    const status = this.lowerIsBetterStatus(ratio, 50, 70);
-    return { value: ratio.toFixed(1), status, trend: null };
+    return this.buildLowerIsBetterRatio(fixedExpense, totalExpense, 50, 70);
   }
 
   /** Higher is better: >= good → 'good', < critical → 'critical', else 'warning'. */
