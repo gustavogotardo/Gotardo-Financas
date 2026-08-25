@@ -230,6 +230,50 @@ describe('Notificações (e2e)', () => {
     expect(budgetNotificationsAfterSecond).toHaveLength(1);
   });
 
+  it('BUDGET_EXCEEDED dispara para envelope alocado em mês passado e estourado por gasto no mês corrente (saldo all-time, não recorte mensal)', async () => {
+    const { token } = await setupFamily('budget-past-alloc');
+    const account = await createCheckingAccount(token, 'Conta orçamento passado');
+    const accountId = (account.body as { id: string }).id;
+
+    const envelope = await createEnvelope(token, { name: 'Assinatura' });
+    const envelopeId = (envelope.body as { id: string }).id;
+
+    const today = todayUtc();
+    // Alocação feita há dois meses: sob o antigo recorte mensal do check,
+    // `allocated` do mês corrente seria 0 e o alerta nunca dispararia de
+    // novo depois que o mês da alocação passasse — mesmo com o envelope
+    // permanentemente estourado (saldo all-time negativo).
+    const pastMonthDate = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 2, 10, 12),
+    );
+
+    const alloc = await allocateEnvelope(token, envelopeId, {
+      amount: 100,
+      date: pastMonthDate.toISOString(),
+    });
+    expect(alloc.status).toBe(201);
+
+    const tx = await createTransaction(token, {
+      accountId,
+      envelopeId,
+      description: 'Gasto do mês atual',
+      amount: 150,
+      type: 'EXPENSE',
+      status: 'CONFIRMED',
+      date: today.toISOString(),
+    });
+    expect(tx.status).toBe(201);
+
+    await checker.runChecks();
+
+    const after = await listNotifications(token);
+    const budgetNotifications = (after.body as NotificationResponse[]).filter(
+      (n) => n.type === 'BUDGET_EXCEEDED' && n.dedupeKey.includes(envelopeId),
+    );
+    expect(budgetNotifications).toHaveLength(1);
+    expect(budgetNotifications[0]?.message).toContain('Assinatura');
+  });
+
   it('BUDGET_EXCEEDED não dispara quando o envelope não tem orçamento alocado', async () => {
     const { token } = await setupFamily('budget-no-alloc');
     const account = await createCheckingAccount(token, 'Conta sem orçamento');
@@ -303,6 +347,32 @@ describe('Notificações (e2e)', () => {
       (n) => n.type === 'GOAL_AT_RISK' && n.dedupeKey.includes(goalId),
     );
     expect(goalNotifications).toHaveLength(0);
+  });
+
+  it('duas execuções concorrentes de runChecks() não duplicam a notificação (corrida TOCTOU tratada via P2002)', async () => {
+    const { token } = await setupFamily('goal-risk-concurrent');
+    const today = todayUtc();
+    const deadline = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 3, 15, 12));
+
+    const goal = await createGoal(token, {
+      name: 'Meta concorrente',
+      targetAmount: 3000,
+      deadline: deadline.toISOString(),
+      monthlyContribution: 100,
+    });
+    expect(goal.status).toBe(201);
+    const goalId = (goal.body as { id: string }).id;
+
+    // Duas checagens completas em paralelo: ambas veem o `findFirst` de
+    // dedupe vazio antes de qualquer uma inserir — sem a constraint única
+    // (+ catch de P2002) isso duplicaria a notificação.
+    await Promise.all([checker.runChecks(), checker.runChecks()]);
+
+    const after = await listNotifications(token);
+    const goalNotifications = (after.body as NotificationResponse[]).filter(
+      (n) => n.type === 'GOAL_AT_RISK' && n.dedupeKey.includes(goalId),
+    );
+    expect(goalNotifications).toHaveLength(1);
   });
 
   it('ACCOUNT_DUE dispara quando o vencimento da fatura está a até 3 dias e não para vencimentos distantes', async () => {

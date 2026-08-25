@@ -3,17 +3,15 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import {
   AccountType,
   DocumentStatus,
-  FamilyRole,
   NotificationSeverity,
   NotificationType,
   Prisma,
-  TransactionStatus,
-  TransactionType,
 } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import { GoalsService } from '../goals/goals.service';
 import { AccountsService } from '../accounts/accounts.service';
-import type { AuthUser } from '../common/auth-user';
+import { EnvelopesService } from '../envelopes/envelopes.service';
+import { systemAuthUser } from '../common/auth-user';
 
 type FamilyMember = { id: string; mutedNotificationTypes: NotificationType[] };
 
@@ -34,6 +32,7 @@ export class NotificationsCheckerService {
     private readonly prisma: PrismaService,
     private readonly goalsService: GoalsService,
     private readonly accountsService: AccountsService,
+    private readonly envelopesService: EnvelopesService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -49,14 +48,18 @@ export class NotificationsCheckerService {
   async runChecks(): Promise<void> {
     const families = await this.prisma.family.findMany({ select: { id: true } });
     for (const family of families) {
-      const members = await this.prisma.user.findMany({
-        where: { familyId: family.id },
-        select: { id: true, mutedNotificationTypes: true },
-      });
-      if (members.length === 0) {
-        continue;
-      }
+      // Todo o corpo do loop — inclusive a busca de membros — fica dentro do
+      // try/catch: uma falha transitória de banco ao buscar membros de uma
+      // família não pode abortar `runChecks()` inteiro e impedir que as
+      // famílias seguintes sejam checadas.
       try {
+        const members = await this.prisma.user.findMany({
+          where: { familyId: family.id },
+          select: { id: true, mutedNotificationTypes: true },
+        });
+        if (members.length === 0) {
+          continue;
+        }
         await this.checkBudgetExceeded(family.id, members);
         await this.checkGoalAtRisk(family.id, members);
         await this.checkAccountDue(family.id, members);
@@ -69,51 +72,22 @@ export class NotificationsCheckerService {
   }
 
   private async checkBudgetExceeded(familyId: string, members: FamilyMember[]): Promise<void> {
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const monthEnd = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999),
-    );
-    const period = this.monthPeriod(now);
+    const period = this.monthPeriod(new Date());
 
-    const envelopes = await this.prisma.envelope.findMany({
-      where: { familyId, isActive: true },
-      select: { id: true, name: true },
-    });
-    if (envelopes.length === 0) {
-      return;
-    }
-    const ids = envelopes.map((e) => e.id);
-
-    const [allocated, spent] = await Promise.all([
-      this.prisma.envelopeAllocation.groupBy({
-        by: ['envelopeId'],
-        where: { envelopeId: { in: ids }, date: { gte: monthStart, lte: monthEnd } },
-        _sum: { amount: true },
-      }),
-      this.prisma.transaction.groupBy({
-        by: ['envelopeId'],
-        where: {
-          envelopeId: { in: ids },
-          familyId,
-          type: TransactionType.EXPENSE,
-          status: TransactionStatus.CONFIRMED,
-          deletedAt: null,
-          date: { gte: monthStart, lte: monthEnd },
-        },
-        _sum: { amount: true },
-      }),
-    ]);
-    const allocatedMap = new Map(
-      allocated.map((a) => [a.envelopeId, a._sum.amount ?? new Prisma.Decimal(0)]),
-    );
-    const spentMap = new Map(
-      spent.map((s) => [s.envelopeId, s._sum.amount ?? new Prisma.Decimal(0)]),
-    );
+    // Reaproveita `EnvelopesService.list` (mesmo cálculo all-time de
+    // alocado/gasto que `withSummaries` usa) para que este check nunca
+    // divirja do saldo "Alocado"/"Gasto"/"Saldo" que a página de Envelopes
+    // exibe. Um recorte por mês corrente aqui faria o alerta parar de
+    // disparar assim que o mês da alocação passasse, mesmo com o envelope
+    // permanentemente estourado.
+    const envelopes = await this.envelopesService.list(systemAuthUser(familyId));
 
     for (const envelope of envelopes) {
-      const allocatedAmount = allocatedMap.get(envelope.id) ?? new Prisma.Decimal(0);
-      const spentAmount = spentMap.get(envelope.id) ?? new Prisma.Decimal(0);
+      if (!envelope.isActive) {
+        continue;
+      }
+      const allocatedAmount = new Prisma.Decimal(envelope.allocated);
+      const spentAmount = new Prisma.Decimal(envelope.spent);
       if (allocatedAmount.lessThanOrEqualTo(0) || !spentAmount.greaterThan(allocatedAmount)) {
         continue;
       }
@@ -123,7 +97,7 @@ export class NotificationsCheckerService {
         NotificationType.BUDGET_EXCEEDED,
         `${NotificationType.BUDGET_EXCEEDED}:${envelope.id}:${period}`,
         'Orçamento estourado',
-        `O envelope "${envelope.name}" já gastou ${this.formatBrl(spentAmount)} de ${this.formatBrl(allocatedAmount)} alocados este mês.`,
+        `O envelope "${envelope.name}" já gastou ${this.formatBrl(spentAmount)} de ${this.formatBrl(allocatedAmount)} alocados.`,
         NotificationSeverity.WARNING,
         '/dashboard',
         {
@@ -139,8 +113,7 @@ export class NotificationsCheckerService {
     const period = this.monthPeriod(new Date());
     // GoalsService só usa `familyId` do AuthUser aqui — os demais campos são
     // irrelevantes para uma listagem em nome do sistema (job periódico).
-    const pseudoUser: AuthUser = { id: '', email: '', familyId, role: FamilyRole.OWNER };
-    const goals = await this.goalsService.list(pseudoUser);
+    const goals = await this.goalsService.list(systemAuthUser(familyId));
 
     for (const goal of goals) {
       if (!goal.isAtRisk) {
@@ -177,7 +150,7 @@ export class NotificationsCheckerService {
 
     const today = this.todayUtc();
     // AuthUser "de sistema": getInvoice só usa familyId para o escopo por tenant.
-    const pseudoUser: AuthUser = { id: '', email: '', familyId, role: FamilyRole.OWNER };
+    const pseudoUser = systemAuthUser(familyId);
     for (const account of accounts) {
       let dueDate: Date;
       try {
@@ -251,6 +224,15 @@ export class NotificationsCheckerService {
    * `type`, uma vez por `dedupeKey` por usuário (a chave já embute o período
    * relevante — mensal ou diário — então a simples existência de um registro
    * com essa chave para o usuário basta como guarda de "já notificado").
+   *
+   * O `findFirst` abaixo é só um atalho para o caso comum (evita uma
+   * tentativa de `create` desperdiçada quando já sabemos que existe). A
+   * garantia real contra duplicatas é a constraint `@@unique([userId,
+   * dedupeKey])` no schema: sob `runChecks()` concorrentes, duas checagens
+   * podem passar pelo `findFirst` antes de qualquer uma criar o registro
+   * (TOCTOU). Nesse caso o `create` perdedor falha com `P2002`, que tratamos
+   * como "já existe, tudo certo" — não é um erro, é a duplicata concorrente
+   * esperada sendo barrada pelo banco.
    */
   private async createIfNotDuplicate(
     members: FamilyMember[],
@@ -274,19 +256,29 @@ export class NotificationsCheckerService {
       if (exists) {
         continue;
       }
-      await this.prisma.notification.create({
-        data: {
-          familyId,
-          userId: member.id,
-          type,
-          title,
-          message,
-          severity,
-          actionUrl,
-          metadata,
-          dedupeKey,
-        },
-      });
+      try {
+        await this.prisma.notification.create({
+          data: {
+            familyId,
+            userId: member.id,
+            type,
+            title,
+            message,
+            severity,
+            actionUrl,
+            metadata,
+            dedupeKey,
+          },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          // Corrida concorrente: outra execução de runChecks() já criou essa
+          // notificação entre nosso findFirst e este create. Comportamento
+          // esperado, não um erro — segue para o próximo membro.
+          continue;
+        }
+        throw error;
+      }
     }
   }
 
