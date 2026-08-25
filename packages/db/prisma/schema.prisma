@@ -116,6 +116,7 @@ model Family {
   accounts       Account[]
   categories     Category[]
   envelopes      Envelope[]
+  incomeSources  IncomeSource[]
   transactions   Transaction[]
   documents      Document[]
   recurringRules RecurringRule[]
@@ -219,6 +220,23 @@ model Category {
   @@index([parentId])
 }
 
+// --- Fontes de renda ---
+
+model IncomeSource {
+  id             String        @id @default(cuid())
+  familyId       String
+  family         Family        @relation(fields: [familyId], references: [id])
+  name           String
+  description    String?
+  expectedAmount Decimal?      @db.Decimal(12, 2)
+  isActive       Boolean       @default(true)
+  transactions   Transaction[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([familyId])
+}
+
 // --- Orçamento por envelopes ---
 
 model Envelope {
@@ -301,6 +319,8 @@ model Transaction {
   suggestedCategory   Category?         @relation("TransactionSuggestedCategory", fields: [suggestedCategoryId], references: [id], onDelete: SetNull)
   envelopeId          String?
   envelope            Envelope?         @relation(fields: [envelopeId], references: [id])
+  incomeSourceId      String?
+  incomeSource        IncomeSource?     @relation(fields: [incomeSourceId], references: [id])
   documentId          String?
   document            Document?         @relation(fields: [documentId], references: [id])
   date                DateTime
@@ -323,6 +343,7 @@ model Transaction {
   @@index([categoryId])
   @@index([suggestedCategoryId])
   @@index([envelopeId])
+  @@index([incomeSourceId])
   @@index([date])
   @@index([installmentGroupId])
 }
