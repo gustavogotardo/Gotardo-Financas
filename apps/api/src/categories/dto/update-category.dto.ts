@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateCategoryDto {
   @IsOptional()
@@ -15,4 +15,12 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsString()
   parentId?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isEssential?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isFixed?: boolean;
 }

@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaModule, PrismaService } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { AccountsModule } from '../accounts/accounts.module';
+import { CategoriesModule } from '../categories/categories.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { ReportsModule } from '../reports/reports.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -22,6 +23,12 @@ process.env.JWT_REFRESH_TTL = '30d';
 type TokensResponse = { accessToken: string; refreshToken: string };
 type MeResponse = { id: string; email: string; role: string; familyId: string };
 type AccountResponse = { id: string; name: string; balance: string };
+type CategoryResponse = {
+  id: string;
+  name: string;
+  isEssential: boolean;
+  isFixed: boolean;
+};
 
 type HealthIndicator = {
   value: string;
@@ -33,6 +40,8 @@ type HealthIndicatorsResponse = {
   savingsRate: HealthIndicator;
   emergencyReserve: HealthIndicator;
   commitment: HealthIndicator;
+  essentialRatio: HealthIndicator;
+  fixedRatio: HealthIndicator;
 };
 
 describe('Indicadores de saúde financeira (e2e)', () => {
@@ -76,6 +85,17 @@ describe('Indicadores de saúde financeira (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ status: 'CONFIRMED', ...body });
 
+  const createCategory = async (
+    token: string,
+    body: Record<string, unknown>,
+  ): Promise<CategoryResponse> => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/categories')
+      .set('Authorization', `Bearer ${token}`)
+      .send(body);
+    return res.body as CategoryResponse;
+  };
+
   const getHealthIndicators = (token: string) =>
     request(app.getHttpServer())
       .get('/api/v1/reports/health-indicators')
@@ -94,6 +114,7 @@ describe('Indicadores de saúde financeira (e2e)', () => {
         PrismaModule,
         AuthModule,
         AccountsModule,
+        CategoriesModule,
         TransactionsModule,
         ReportsModule,
       ],
@@ -115,6 +136,7 @@ describe('Indicadores de saúde financeira (e2e)', () => {
   afterAll(async () => {
     await prisma.$transaction([
       prisma.transaction.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      prisma.category.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.notification.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.refreshToken.deleteMany({
@@ -317,5 +339,157 @@ describe('Indicadores de saúde financeira (e2e)', () => {
     expect(bodyB.savingsRate.value).toBe('0.0');
     expect(bodyB.savingsRate.status).toBe('warning');
     expect(bodyB.emergencyReserve.value).toBe('0.0');
+  });
+
+  it('cria, consulta e atualiza a classificação essencial/fixa de categorias', async () => {
+    const { token } = await setupFamily('category-flags');
+
+    const essential = await createCategory(token, { name: 'Moradia', isEssential: true });
+    expect(essential.isEssential).toBe(true);
+    expect(essential.isFixed).toBe(false);
+
+    const fixed = await createCategory(token, { name: 'Assinaturas', isFixed: true });
+    expect(fixed.isEssential).toBe(false);
+    expect(fixed.isFixed).toBe(true);
+
+    const plain = await createCategory(token, { name: 'Lazer' });
+    expect(plain.isEssential).toBe(false);
+    expect(plain.isFixed).toBe(false);
+
+    const getRes = await request(app.getHttpServer())
+      .get(`/api/v1/categories/${essential.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(getRes.status).toBe(200);
+    expect((getRes.body as CategoryResponse).isEssential).toBe(true);
+
+    const listRes = await request(app.getHttpServer())
+      .get('/api/v1/categories')
+      .set('Authorization', `Bearer ${token}`);
+    const listed = listRes.body as CategoryResponse[];
+    expect(listed.find((c) => c.id === fixed.id)?.isFixed).toBe(true);
+
+    const patchRes = await request(app.getHttpServer())
+      .patch(`/api/v1/categories/${plain.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ isEssential: true, isFixed: true });
+    expect(patchRes.status).toBe(200);
+    const patched = patchRes.body as CategoryResponse;
+    expect(patched.isEssential).toBe(true);
+    expect(patched.isFixed).toBe(true);
+  });
+
+  it('calcula essentialRatio e fixedRatio ignorando categorias não classificadas no numerador', async () => {
+    const { token } = await setupFamily('essential-fixed-ratio');
+    const accountId = await createAccount(token);
+
+    const essentialCategory = await createCategory(token, {
+      name: 'Moradia',
+      isEssential: true,
+    });
+    const fixedCategory = await createCategory(token, { name: 'Assinaturas', isFixed: true });
+    const plainCategory = await createCategory(token, { name: 'Lazer' });
+
+    // Total de despesas confirmadas no mês corrente: 700 + 200 + 100 = 1000.
+    await createTransaction(token, {
+      accountId,
+      categoryId: essentialCategory.id,
+      description: 'Aluguel',
+      amount: 700,
+      type: 'EXPENSE',
+      date: monthDate(0).toISOString(),
+    });
+    await createTransaction(token, {
+      accountId,
+      categoryId: fixedCategory.id,
+      description: 'Streaming',
+      amount: 200,
+      type: 'EXPENSE',
+      date: monthDate(0).toISOString(),
+    });
+    // Categoria não classificada: entra no total, mas não no numerador de
+    // nenhum dos dois indicadores.
+    await createTransaction(token, {
+      accountId,
+      categoryId: plainCategory.id,
+      description: 'Cinema',
+      amount: 100,
+      type: 'EXPENSE',
+      date: monthDate(0).toISOString(),
+    });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    // 700 / 1000 * 100 = 70.0 -> não é < 60 nem > 80 -> warning
+    expect(body.essentialRatio.value).toBe('70.0');
+    expect(body.essentialRatio.status).toBe('warning');
+    expect(body.essentialRatio.trend).toBeNull();
+    // 200 / 1000 * 100 = 20.0 -> < 50 -> good
+    expect(body.fixedRatio.value).toBe('20.0');
+    expect(body.fixedRatio.status).toBe('good');
+    expect(body.fixedRatio.trend).toBeNull();
+  });
+
+  it('calcula essentialRatio e fixedRatio "critical" quando quase todo gasto é essencial/fixo', async () => {
+    const { token } = await setupFamily('essential-fixed-critical');
+    const accountId = await createAccount(token);
+
+    const bothCategory = await createCategory(token, {
+      name: 'Financiamento da casa',
+      isEssential: true,
+      isFixed: true,
+    });
+    const plainCategory = await createCategory(token, { name: 'Diversos' });
+
+    await createTransaction(token, {
+      accountId,
+      categoryId: bothCategory.id,
+      description: 'Parcela do financiamento',
+      amount: 900,
+      type: 'EXPENSE',
+      date: monthDate(0).toISOString(),
+    });
+    await createTransaction(token, {
+      accountId,
+      categoryId: plainCategory.id,
+      description: 'Compras diversas',
+      amount: 100,
+      type: 'EXPENSE',
+      date: monthDate(0).toISOString(),
+    });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    // 900 / 1000 * 100 = 90.0 -> > 80 -> critical
+    expect(body.essentialRatio.value).toBe('90.0');
+    expect(body.essentialRatio.status).toBe('critical');
+    // 900 / 1000 * 100 = 90.0 -> > 70 -> critical
+    expect(body.fixedRatio.value).toBe('90.0');
+    expect(body.fixedRatio.status).toBe('critical');
+  });
+
+  it('essentialRatio/fixedRatio não quebram quando não há despesa no mês corrente', async () => {
+    const { token } = await setupFamily('essential-fixed-zero');
+    const accountId = await createAccount(token);
+
+    // Só receita no mês corrente, sem despesa nenhuma.
+    await createTransaction(token, {
+      accountId,
+      description: 'Salário',
+      amount: 5000,
+      type: 'INCOME',
+      date: monthDate(0).toISOString(),
+    });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    expect(body.essentialRatio.value).toBe('0.0');
+    expect(body.essentialRatio.status).toBe('warning');
+    expect(body.essentialRatio.trend).toBeNull();
+    expect(body.fixedRatio.value).toBe('0.0');
+    expect(body.fixedRatio.status).toBe('warning');
+    expect(body.fixedRatio.trend).toBeNull();
   });
 });

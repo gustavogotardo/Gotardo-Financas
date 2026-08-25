@@ -30,6 +30,8 @@ export class CategoriesService {
         name: dto.name,
         icon: dto.icon,
         parentId: dto.parentId,
+        isEssential: dto.isEssential,
+        isFixed: dto.isFixed,
         familyId: user.familyId,
       },
     });
@@ -56,7 +58,13 @@ export class CategoriesService {
     }
     return this.prisma.category.update({
       where: { id },
-      data: { name: dto.name, icon: dto.icon, parentId: dto.parentId },
+      data: {
+        name: dto.name,
+        icon: dto.icon,
+        parentId: dto.parentId,
+        isEssential: dto.isEssential,
+        isFixed: dto.isFixed,
+      },
     });
   }
 

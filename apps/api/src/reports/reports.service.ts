@@ -97,6 +97,8 @@ export type HealthIndicatorsResponse = {
   savingsRate: HealthIndicator;
   emergencyReserve: HealthIndicator;
   commitment: HealthIndicator;
+  essentialRatio: HealthIndicator;
+  fixedRatio: HealthIndicator;
 };
 
 const CONFIRMED = TransactionStatus.CONFIRMED;
@@ -357,11 +359,10 @@ export class ReportsService {
   }
 
   /**
-   * §2.9 / §27.1 "Indicadores de Saúde" — Taxa de Poupança, Reserva de Emergência e
-   * Comprometimento de Renda. The other 4 indicators from §27.1 (Dívida/Renda,
-   * Diversificação de Fontes, Gasto Essencial/Total, Recorrência/Total) are out of
-   * scope: this app has no debt tracking, income-source, or essential/fixed-expense
-   * classification data to compute them from.
+   * §2.9 / §27.1 "Indicadores de Saúde" — Taxa de Poupança, Reserva de Emergência,
+   * Comprometimento de Renda, Gasto Essencial/Total e Recorrência/Total. The other 2
+   * indicators from §27.1 (Dívida/Renda, Diversificação de Fontes) are out of scope:
+   * this app has no debt tracking or income-source data to compute them from.
    */
   async healthIndicators(user: AuthUser): Promise<HealthIndicatorsResponse> {
     const now = new Date();
@@ -370,6 +371,7 @@ export class ReportsService {
     // NotificationsCheckerService, GoalsService) — evita depender do fuso do
     // processo do servidor.
     const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const currentMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const previousMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
     /**
      * Trailing 3 calendar months = the current (possibly partial) month plus the two
@@ -379,7 +381,15 @@ export class ReportsService {
     const windowStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
     const windowEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-    const [rows, balanceAgg, family] = await Promise.all([
+    const currentMonthExpenseWhere: Prisma.TransactionWhereInput = {
+      familyId: user.familyId,
+      deletedAt: null,
+      status: CONFIRMED,
+      type: TransactionType.EXPENSE,
+      date: { gte: currentMonthStart, lt: currentMonthEnd },
+    };
+
+    const [rows, balanceAgg, family, essentialExpenseAgg, fixedExpenseAgg] = await Promise.all([
       this.prisma.$queryRaw<CashflowRow[]>(
         Prisma.sql`
           SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
@@ -403,6 +413,18 @@ export class ReportsService {
       this.prisma.family.findUniqueOrThrow({
         where: { id: user.familyId },
         select: { createdAt: true },
+      }),
+      // Gasto Essencial/Total (§27.1): soma das despesas do mês corrente cuja
+      // categoria está marcada como essencial. Transações sem categoria, ou com
+      // categoria não-essencial, não entram nessa soma (mas entram no total).
+      this.prisma.transaction.aggregate({
+        where: { ...currentMonthExpenseWhere, category: { isEssential: true } },
+        _sum: { amount: true },
+      }),
+      // Recorrência/Total (§27.1): mesma lógica, para categorias fixas.
+      this.prisma.transaction.aggregate({
+        where: { ...currentMonthExpenseWhere, category: { isFixed: true } },
+        _sum: { amount: true },
       }),
     ]);
 
@@ -436,10 +458,15 @@ export class ReportsService {
 
     const totalBalance = balanceAgg._sum.balance ?? new Prisma.Decimal(0);
 
+    const essentialExpense = essentialExpenseAgg._sum.amount ?? new Prisma.Decimal(0);
+    const fixedExpense = fixedExpenseAgg._sum.amount ?? new Prisma.Decimal(0);
+
     return {
       savingsRate: this.buildSavingsRate(currentIncome, currentExpense, previousRow),
       emergencyReserve: this.buildEmergencyReserve(totalBalance, avgExpense),
       commitment: this.buildCommitment(avgExpense, avgIncome),
+      essentialRatio: this.buildEssentialRatio(essentialExpense, currentExpense),
+      fixedRatio: this.buildFixedRatio(fixedExpense, currentExpense),
     };
   }
 
@@ -496,6 +523,40 @@ export class ReportsService {
       return { value: '0.0', status: 'warning', trend: null };
     }
     const ratio = avgExpense.dividedBy(avgIncome).times(100);
+    const status = this.lowerIsBetterStatus(ratio, 50, 70);
+    return { value: ratio.toFixed(1), status, trend: null };
+  }
+
+  /**
+   * Gasto Essencial/Total (§27.1) — proporção das despesas confirmadas do mês
+   * corrente cuja categoria é marcada como essencial. Lower is better: uma família
+   * que gasta quase tudo em itens essenciais tem pouca margem pra poupar ou
+   * ajustar o orçamento em caso de aperto.
+   */
+  private buildEssentialRatio(
+    essentialExpense: Prisma.Decimal,
+    totalExpense: Prisma.Decimal,
+  ): HealthIndicator {
+    if (totalExpense.lessThanOrEqualTo(0)) {
+      return { value: '0.0', status: 'warning', trend: null };
+    }
+    const ratio = essentialExpense.dividedBy(totalExpense).times(100);
+    const status = this.lowerIsBetterStatus(ratio, 60, 80);
+    return { value: ratio.toFixed(1), status, trend: null };
+  }
+
+  /**
+   * Recorrência/Total (§27.1) — mesma lógica de `buildEssentialRatio`, mas para
+   * despesas de categorias marcadas como fixas (recorrentes).
+   */
+  private buildFixedRatio(
+    fixedExpense: Prisma.Decimal,
+    totalExpense: Prisma.Decimal,
+  ): HealthIndicator {
+    if (totalExpense.lessThanOrEqualTo(0)) {
+      return { value: '0.0', status: 'warning', trend: null };
+    }
+    const ratio = fixedExpense.dividedBy(totalExpense).times(100);
     const status = this.lowerIsBetterStatus(ratio, 50, 70);
     return { value: ratio.toFixed(1), status, trend: null };
   }
