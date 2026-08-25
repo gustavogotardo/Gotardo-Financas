@@ -22,6 +22,20 @@ export function toISODate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Data de hoje no calendário local (YYYY-MM-DD), não em UTC. `toISODate` usa
+ * o dia em UTC, que já é o dia seguinte à noite em fusos negativos (ex.:
+ * BRT/UTC-3) — usar isso para pré-preencher um campo de data adianta o dia
+ * por engano.
+ */
+export function todayLocalISODate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function monthRange(reference = new Date()): { from: string; to: string } {
   const year = reference.getFullYear();
   const month = reference.getMonth();

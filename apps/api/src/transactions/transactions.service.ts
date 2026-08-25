@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma, TransactionSource, TransactionStatus, TransactionType } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import { CategorySuggesterService } from '../ml/category-suggester.service';
+import { addMonthsUtc } from '../common/date-utils';
 import type { AuthUser } from '../common/auth-user';
 import type { CreateTransactionDto } from './dto/create-transaction.dto';
 import type { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -106,7 +107,7 @@ export class TransactionsService {
             status: TransactionStatus.PENDING,
             source: dto.source ?? TransactionSource.MANUAL,
             paymentMethod: dto.paymentMethod,
-            date: this.addMonthsUtc(baseDate, i),
+            date: addMonthsUtc(baseDate, i),
             installmentNumber,
             installmentTotal: total,
             installmentGroupId,
@@ -267,31 +268,6 @@ export class TransactionsService {
     const lastIndex = count - 1;
     amounts[lastIndex] = ((baseCents + remainderCents) / 100).toFixed(2);
     return amounts;
-  }
-
-  /**
-   * Soma `months` meses a `date`, preservando o horário (aritmética em UTC).
-   * Quando o dia original não existe no mês de destino (ex.: 31 em um mês
-   * com 30 dias, ou 29/30/31 de fevereiro), o dia é ajustado ("clampado")
-   * para o último dia válido do mês de destino, em vez de deixar o
-   * `Date.UTC` normalizar (rolar) para o mês seguinte.
-   */
-  private addMonthsUtc(date: Date, months: number): Date {
-    const targetYear = date.getUTCFullYear();
-    const targetMonth = date.getUTCMonth() + months;
-    const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-    const day = Math.min(date.getUTCDate(), lastDayOfTargetMonth);
-    return new Date(
-      Date.UTC(
-        targetYear,
-        targetMonth,
-        day,
-        date.getUTCHours(),
-        date.getUTCMinutes(),
-        date.getUTCSeconds(),
-        date.getUTCMilliseconds(),
-      ),
-    );
   }
 
   private balanceDelta(type: TransactionType, amount: Prisma.Decimal): Prisma.Decimal {

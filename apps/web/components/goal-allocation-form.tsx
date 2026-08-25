@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { apiFetch, type CreateGoalAllocationInput, type GoalRecord } from '@/lib/api';
+import { todayLocalISODate } from '@/lib/format';
 import { Button, Card, ErrorBox, Field, Input } from './ui';
 
 type Props = {
@@ -13,7 +14,7 @@ type Props = {
 export function GoalAllocationForm({ goal, onDone, onCancel }: Props) {
   const [form, setForm] = useState<CreateGoalAllocationInput>({
     amount: 0,
-    date: new Date().toISOString().slice(0, 10),
+    date: todayLocalISODate(),
     note: '',
   });
   const [error, setError] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { GoalStatus, Prisma } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
+import { addMonthsUtc } from '../common/date-utils';
 import type { AuthUser } from '../common/auth-user';
 import type { CreateGoalDto } from './dto/create-goal.dto';
 import type { UpdateGoalDto } from './dto/update-goal.dto';
@@ -146,20 +147,6 @@ export class GoalsService {
     return goal;
   }
 
-  /**
-   * Soma `months` meses a `date`, preservando o horário (aritmética em UTC).
-   * Quando o dia original não existe no mês de destino, o dia é ajustado
-   * ("clampado") para o último dia válido do mês de destino, em vez de
-   * deixar o `Date.UTC` normalizar (rolar) para o mês seguinte.
-   */
-  private addMonthsUtc(date: Date, months: number): Date {
-    const targetYear = date.getUTCFullYear();
-    const targetMonth = date.getUTCMonth() + months;
-    const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-    const day = Math.min(date.getUTCDate(), lastDayOfTargetMonth);
-    return new Date(Date.UTC(targetYear, targetMonth, day));
-  }
-
   private async withSummaries(goals: GoalBase[]): Promise<GoalWithSummary[]> {
     const ids = goals.map((g) => g.id);
     if (ids.length === 0) {
@@ -218,8 +205,19 @@ export class GoalsService {
         const monthsNeeded = shortfall.lessThanOrEqualTo(0)
           ? 0
           : shortfall.dividedBy(goal.monthlyContribution).ceil().toNumber();
-        const predictedDate = this.addMonthsUtc(today, monthsNeeded);
-        predictedCompletionDate = predictedDate.toISOString();
+        const predictedDate = addMonthsUtc(today, monthsNeeded);
+        // Serializado ao meio-dia UTC (não meia-noite) para não exibir um dia
+        // adiantado em fusos negativos ao formatar no cliente (ex.: BRT/UTC-3,
+        // o público-alvo deste app) — mesma âncora usada no `deadline` recebido
+        // do frontend (`T12:00:00.000Z`).
+        predictedCompletionDate = new Date(
+          Date.UTC(
+            predictedDate.getUTCFullYear(),
+            predictedDate.getUTCMonth(),
+            predictedDate.getUTCDate(),
+            12,
+          ),
+        ).toISOString();
       }
 
       const deadlineBlown = deadlineIsPast && currentAmount.lessThan(targetAmount);
