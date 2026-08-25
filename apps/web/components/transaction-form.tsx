@@ -6,6 +6,7 @@ import {
   type AccountRecord,
   type CategoryRecord,
   type CreateTransactionInput,
+  type IncomeSourceRecord,
 } from '@/lib/api';
 import { paymentMethodLabel, statusLabel, transactionTypeLabel } from '@/lib/format';
 import { Button, Card, ErrorBox, Field, Input, Select } from './ui';
@@ -18,13 +19,20 @@ const STATUSES = ['CONFIRMED', 'PENDING', 'REJECTED', 'REVIEW'];
 type Props = {
   accounts: AccountRecord[];
   categories: CategoryRecord[];
+  incomeSources: IncomeSourceRecord[];
   onCreated: () => Promise<void>;
   onCancel: () => void;
 };
 
-export function TransactionForm({ accounts, categories, onCreated, onCancel }: Props) {
+export function TransactionForm({
+  accounts,
+  categories,
+  incomeSources,
+  onCreated,
+  onCancel,
+}: Props) {
   const [form, setForm] = useState<
-    CreateTransactionInput & { paymentMethod: string; categoryId: string }
+    CreateTransactionInput & { paymentMethod: string; categoryId: string; incomeSourceId: string }
   >({
     description: '',
     amount: 0,
@@ -33,6 +41,7 @@ export function TransactionForm({ accounts, categories, onCreated, onCancel }: P
     paymentMethod: '',
     accountId: accounts[0]?.id ?? '',
     categoryId: '',
+    incomeSourceId: '',
     date: new Date().toISOString().slice(0, 10),
   });
   const [installments, setInstallments] = useState('');
@@ -56,6 +65,7 @@ export function TransactionForm({ accounts, categories, onCreated, onCancel }: P
         accountId: form.accountId,
         date: `${form.date}T12:00:00.000Z`,
         ...(form.categoryId ? { categoryId: form.categoryId } : {}),
+        ...(form.incomeSourceId ? { incomeSourceId: form.incomeSourceId } : {}),
         ...(form.paymentMethod ? { paymentMethod: form.paymentMethod } : {}),
         ...(Number(installments) >= 2 ? { installments: Number(installments) } : {}),
       };
@@ -138,6 +148,19 @@ export function TransactionForm({ accounts, categories, onCreated, onCancel }: P
               {[...parents, ...children].map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.parentId ? `— ${category.name}` : category.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Fonte de renda">
+            <Select
+              value={form.incomeSourceId}
+              onChange={(e) => update('incomeSourceId', e.target.value)}
+            >
+              <option value="">Sem fonte de renda</option>
+              {incomeSources.map((incomeSource) => (
+                <option key={incomeSource.id} value={incomeSource.id}>
+                  {incomeSource.name}
                 </option>
               ))}
             </Select>

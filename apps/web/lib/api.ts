@@ -136,6 +136,7 @@ export type CreateTransactionInput = {
   status: string;
   accountId: string;
   categoryId?: string;
+  incomeSourceId?: string;
   paymentMethod?: string;
   date: string;
   installments?: number;
@@ -156,6 +157,24 @@ export type CreateCategoryInput = {
   parentId?: string;
   isEssential?: boolean;
   isFixed?: boolean;
+};
+
+export type IncomeSourceRecord = {
+  id: string;
+  familyId: string;
+  name: string;
+  description: string | null;
+  expectedAmount: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateIncomeSourceInput = {
+  name: string;
+  description?: string;
+  expectedAmount?: number;
+  isActive?: boolean;
 };
 
 export type EnvelopeRecord = {
@@ -313,6 +332,7 @@ export type HealthIndicatorsResponse = {
   commitment: HealthIndicator;
   essentialRatio: HealthIndicator;
   fixedRatio: HealthIndicator;
+  incomeDiversification: HealthIndicator;
 };
 
 export function getAccountInvoice(accountId: string, period?: string): Promise<AccountInvoice> {

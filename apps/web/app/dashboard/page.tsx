@@ -15,6 +15,7 @@ import { CategoryChart } from '@/components/dashboard/category-chart';
 import { EnvelopesSection } from '@/components/dashboard/envelopes-section';
 import { HealthIndicatorsSection } from '@/components/dashboard/health-indicators-section';
 import { ImportsSection } from '@/components/dashboard/imports-section';
+import { IncomeSourcesSection } from '@/components/dashboard/income-sources-section';
 import { TransactionsSection } from '@/components/dashboard/transactions-section';
 import { NotificationBell } from '@/components/notification-bell';
 
@@ -147,6 +148,7 @@ export default function DashboardPage() {
           <TransactionForm
             accounts={data.accounts}
             categories={data.categories}
+            incomeSources={data.incomeSources}
             onCancel={() => setShowForm(false)}
             onCreated={async () => {
               setShowForm(false);
@@ -190,6 +192,12 @@ export default function DashboardPage() {
             />
 
             <EnvelopesSection envelopes={data.envelopes} canManage={canManage} onReload={reload} />
+
+            <IncomeSourcesSection
+              incomeSources={data.incomeSources}
+              canManage={canManage}
+              onReload={reload}
+            />
 
             <ImportsSection
               accounts={data.accounts}

@@ -92,6 +92,11 @@ export function HealthIndicatorsSection({ refreshToken }: Props) {
               value={formatIndicatorValue(indicators.fixedRatio, '%')}
               tone={STATUS_TONE[indicators.fixedRatio.status]}
             />
+            <StatCard
+              label="Diversificação de fontes"
+              value={formatIndicatorValue(indicators.incomeDiversification, '')}
+              tone={STATUS_TONE[indicators.incomeDiversification.status]}
+            />
           </div>
         )}
       </Card>
