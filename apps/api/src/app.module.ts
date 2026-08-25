@@ -11,6 +11,7 @@ import { AccountsModule } from './accounts/accounts.module';
 import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { EnvelopesModule } from './envelopes/envelopes.module';
+import { GoalsModule } from './goals/goals.module';
 import { ReportsModule } from './reports/reports.module';
 import { ImportsModule } from './imports/imports.module';
 import { MlModule } from './ml/ml.module';
@@ -30,6 +31,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CategoriesModule,
     TransactionsModule,
     EnvelopesModule,
+    GoalsModule,
     ReportsModule,
     ImportsModule,
     MlModule,
