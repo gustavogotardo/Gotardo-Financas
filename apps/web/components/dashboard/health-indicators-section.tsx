@@ -82,6 +82,16 @@ export function HealthIndicatorsSection({ refreshToken }: Props) {
               value={formatIndicatorValue(indicators.commitment, '%')}
               tone={STATUS_TONE[indicators.commitment.status]}
             />
+            <StatCard
+              label="Gasto essencial"
+              value={formatIndicatorValue(indicators.essentialRatio, '%')}
+              tone={STATUS_TONE[indicators.essentialRatio.status]}
+            />
+            <StatCard
+              label="Despesas fixas"
+              value={formatIndicatorValue(indicators.fixedRatio, '%')}
+              tone={STATUS_TONE[indicators.fixedRatio.status]}
+            />
           </div>
         )}
       </Card>

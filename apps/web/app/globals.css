@@ -538,6 +538,20 @@ a:hover {
   font-size: 0.85rem;
 }
 
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.75rem 0;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
 .suggestion {
   display: inline-block;
   padding: 0.1rem 0.5rem;

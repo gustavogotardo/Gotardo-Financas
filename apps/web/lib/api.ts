@@ -78,6 +78,8 @@ export type CategoryRecord = {
   name: string;
   parentId: string | null;
   icon: string | null;
+  isEssential: boolean;
+  isFixed: boolean;
 };
 
 export type PaymentMethodRow = {
@@ -152,6 +154,8 @@ export type CreateCategoryInput = {
   name: string;
   icon?: string;
   parentId?: string;
+  isEssential?: boolean;
+  isFixed?: boolean;
 };
 
 export type EnvelopeRecord = {
@@ -307,6 +311,8 @@ export type HealthIndicatorsResponse = {
   savingsRate: HealthIndicator;
   emergencyReserve: HealthIndicator;
   commitment: HealthIndicator;
+  essentialRatio: HealthIndicator;
+  fixedRatio: HealthIndicator;
 };
 
 export function getAccountInvoice(accountId: string, period?: string): Promise<AccountInvoice> {

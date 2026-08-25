@@ -17,6 +17,8 @@ export function CategoryForm({ category, categories, onDone, onCancel }: Props) 
     name: category?.name ?? '',
     icon: category?.icon ?? '',
     parentId: category?.parentId ?? '',
+    isEssential: category?.isEssential ?? false,
+    isFixed: category?.isFixed ?? false,
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -30,7 +32,11 @@ export function CategoryForm({ category, categories, onDone, onCancel }: Props) 
     setError(null);
     setSubmitting(true);
     try {
-      const payload: Record<string, unknown> = { name: form.name };
+      const payload: Record<string, unknown> = {
+        name: form.name,
+        isEssential: form.isEssential,
+        isFixed: form.isFixed,
+      };
       if (form.icon) payload.icon = form.icon;
       if (isEdit && !category) return;
       if (isEdit) payload.parentId = form.parentId || null;
@@ -96,6 +102,24 @@ export function CategoryForm({ category, categories, onDone, onCancel }: Props) 
               maxLength={50}
             />
           </Field>
+        </div>
+        <div className="checkbox-group">
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={form.isEssential}
+              onChange={(e) => setForm((prev) => ({ ...prev, isEssential: e.target.checked }))}
+            />
+            Essencial
+          </label>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={form.isFixed}
+              onChange={(e) => setForm((prev) => ({ ...prev, isFixed: e.target.checked }))}
+            />
+            Fixa/recorrente
+          </label>
         </div>
         {error ? <ErrorBox>{error}</ErrorBox> : null}
         <div className="form-actions">
