@@ -6,6 +6,7 @@ import {
   type CashflowResponse,
   type CategoryExpenseRow,
   type EnvelopeExpenseRow,
+  type HealthIndicatorsResponse,
   type PaymentMethodRow,
 } from './reports.service';
 import type { AuthUser } from '../common/auth-user';
@@ -54,6 +55,11 @@ export class ReportsController {
     @Query() query: ReportRangeDto,
   ): Promise<AnomalyRow[]> {
     return this.reports.anomalies(user, query.from, query.to);
+  }
+
+  @Get('health-indicators')
+  healthIndicators(@CurrentUser() user: AuthUser): Promise<HealthIndicatorsResponse> {
+    return this.reports.healthIndicators(user);
   }
 
   @Get('account-statement/:accountId')

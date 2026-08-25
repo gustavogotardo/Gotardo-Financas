@@ -83,7 +83,26 @@ type CashflowRow = {
   expense: Prisma.Decimal;
 };
 
+export type HealthIndicatorStatus = 'good' | 'warning' | 'critical';
+export type HealthIndicatorTrend = 'up' | 'down' | 'stable' | null;
+
+export type HealthIndicator = {
+  /** Formatted number as a string with 1 decimal place (e.g. "26.7"); no unit/suffix. */
+  value: string;
+  status: HealthIndicatorStatus;
+  trend: HealthIndicatorTrend;
+};
+
+export type HealthIndicatorsResponse = {
+  savingsRate: HealthIndicator;
+  emergencyReserve: HealthIndicator;
+  commitment: HealthIndicator;
+};
+
 const CONFIRMED = TransactionStatus.CONFIRMED;
+
+/** Trend is only "meaningful" once the delta exceeds this many percentage points. */
+const TREND_EPSILON = 0.5;
 
 @Injectable()
 export class ReportsService {
@@ -335,6 +354,154 @@ export class ReportsService {
         reason: flag?.reason ?? null,
       };
     });
+  }
+
+  /**
+   * §2.9 / §27.1 "Indicadores de Saúde" — Taxa de Poupança, Reserva de Emergência e
+   * Comprometimento de Renda. The other 4 indicators from §27.1 (Dívida/Renda,
+   * Diversificação de Fontes, Gasto Essencial/Total, Recorrência/Total) are out of
+   * scope: this app has no debt tracking, income-source, or essential/fixed-expense
+   * classification data to compute them from.
+   */
+  async healthIndicators(user: AuthUser): Promise<HealthIndicatorsResponse> {
+    const now = new Date();
+    // Mês corrente/anterior calculados em UTC, mesma convenção já usada em
+    // todo o resto do app pra "que mês é agora" (AccountsService.getInvoice,
+    // NotificationsCheckerService, GoalsService) — evita depender do fuso do
+    // processo do servidor.
+    const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const previousMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    /**
+     * Trailing 3 calendar months = the current (possibly partial) month plus the two
+     * full calendar months before it. E.g. on any day in 2026-08 the window is
+     * [2026-06-01, 2026-09-01). Averages always divide by a fixed denominator of 3,
+     * regardless of whether every month in the window has transactions (a month with
+     * no confirmed transactions simply contributes R$ 0 to the sum).
+     */
+    const windowStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
+    const windowEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+    const [rows, balanceAgg] = await Promise.all([
+      this.prisma.$queryRaw<CashflowRow[]>(
+        Prisma.sql`
+          SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
+                 COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
+                 COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense
+          FROM "Transaction"
+          WHERE "familyId" = ${user.familyId}
+            AND "deletedAt" IS NULL
+            AND status = 'CONFIRMED'
+            AND date >= ${windowStart}
+            AND date < ${windowEnd}
+          GROUP BY month
+        `,
+      ),
+      // "Saldo total" — same definition as the dashboard's stat card: sum of balance
+      // across active (non-archived, non-deleted) accounts.
+      this.prisma.account.aggregate({
+        where: { familyId: user.familyId, deletedAt: null, isArchived: false },
+        _sum: { balance: true },
+      }),
+    ]);
+
+    const byMonth = new Map(rows.map((row) => [row.month, row]));
+    const currentRow = byMonth.get(this.monthKey(currentMonthStart));
+    const previousRow = byMonth.get(this.monthKey(previousMonthStart));
+
+    const currentIncome = currentRow?.income ?? new Prisma.Decimal(0);
+    const currentExpense = currentRow?.expense ?? new Prisma.Decimal(0);
+
+    const totalIncome3 = rows.reduce((acc, row) => acc.plus(row.income), new Prisma.Decimal(0));
+    const totalExpense3 = rows.reduce((acc, row) => acc.plus(row.expense), new Prisma.Decimal(0));
+    const avgIncome = totalIncome3.dividedBy(3);
+    const avgExpense = totalExpense3.dividedBy(3);
+
+    const totalBalance = balanceAgg._sum.balance ?? new Prisma.Decimal(0);
+
+    return {
+      savingsRate: this.buildSavingsRate(currentIncome, currentExpense, previousRow),
+      emergencyReserve: this.buildEmergencyReserve(totalBalance, avgExpense),
+      commitment: this.buildCommitment(avgExpense, avgIncome),
+    };
+  }
+
+  private monthKey(date: Date): string {
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  private buildSavingsRate(
+    income: Prisma.Decimal,
+    expense: Prisma.Decimal,
+    previousRow: CashflowRow | undefined,
+  ): HealthIndicator {
+    if (income.lessThanOrEqualTo(0)) {
+      return { value: '0.0', status: 'warning', trend: null };
+    }
+    const rate = income.minus(expense).dividedBy(income).times(100);
+    const status = this.higherIsBetterStatus(rate, 20, 10);
+
+    let trend: HealthIndicatorTrend = null;
+    if (previousRow && previousRow.income.greaterThan(0)) {
+      const previousRate = previousRow.income
+        .minus(previousRow.expense)
+        .dividedBy(previousRow.income)
+        .times(100);
+      const diff = rate.minus(previousRate);
+      if (diff.greaterThan(TREND_EPSILON)) {
+        trend = 'up';
+      } else if (diff.lessThan(-TREND_EPSILON)) {
+        trend = 'down';
+      } else {
+        trend = 'stable';
+      }
+    }
+
+    return { value: rate.toFixed(1), status, trend };
+  }
+
+  private buildEmergencyReserve(
+    totalBalance: Prisma.Decimal,
+    avgExpense: Prisma.Decimal,
+  ): HealthIndicator {
+    // No expense history in the trailing window: the ratio is undefined, not
+    // "critical" — surface it as a neutral 0.0/warning instead of crashing (Infinity).
+    if (avgExpense.lessThanOrEqualTo(0)) {
+      return { value: '0.0', status: 'warning', trend: null };
+    }
+    const months = totalBalance.dividedBy(avgExpense);
+    const status = this.higherIsBetterStatus(months, 6, 3);
+    return { value: months.toFixed(1), status, trend: null };
+  }
+
+  private buildCommitment(avgExpense: Prisma.Decimal, avgIncome: Prisma.Decimal): HealthIndicator {
+    if (avgIncome.lessThanOrEqualTo(0)) {
+      return { value: '0.0', status: 'warning', trend: null };
+    }
+    const ratio = avgExpense.dividedBy(avgIncome).times(100);
+    const status = this.lowerIsBetterStatus(ratio, 50, 70);
+    return { value: ratio.toFixed(1), status, trend: null };
+  }
+
+  /** Higher is better: >= good → 'good', < critical → 'critical', else 'warning'. */
+  private higherIsBetterStatus(
+    value: Prisma.Decimal,
+    goodThreshold: number,
+    criticalThreshold: number,
+  ): HealthIndicatorStatus {
+    if (value.greaterThanOrEqualTo(goodThreshold)) return 'good';
+    if (value.lessThan(criticalThreshold)) return 'critical';
+    return 'warning';
+  }
+
+  /** Lower is better: < good → 'good', > critical → 'critical', else 'warning'. */
+  private lowerIsBetterStatus(
+    value: Prisma.Decimal,
+    goodThreshold: number,
+    criticalThreshold: number,
+  ): HealthIndicatorStatus {
+    if (value.lessThan(goodThreshold)) return 'good';
+    if (value.greaterThan(criticalThreshold)) return 'critical';
+    return 'warning';
   }
 
   private expenseWhere(user: AuthUser, from?: Date, to?: Date): Prisma.TransactionWhereInput {
