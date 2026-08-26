@@ -143,6 +143,15 @@ const CONFIRMED = TransactionStatus.CONFIRMED;
 /** Trend is only "meaningful" once the delta exceeds this many percentage points. */
 const TREND_EPSILON = 0.5;
 
+/**
+ * Conta "ativa" para fins de relatórios: não arquivada e não excluída — mesma
+ * definição usada no card "Saldo total" do dashboard. Duas representações da
+ * mesma regra (uma por Prisma, outra em SQL cru para JOIN) porque não há um
+ * jeito único de expressar ambas; mantenha-as em sync se a regra mudar.
+ */
+const ACTIVE_ACCOUNT_WHERE: Prisma.AccountWhereInput = { isArchived: false, deletedAt: null };
+const ACTIVE_ACCOUNT_SQL = Prisma.sql`a."isArchived" = false AND a."deletedAt" IS NULL`;
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -155,15 +164,17 @@ export class ReportsService {
   async cashflow(user: AuthUser, from?: Date, to?: Date): Promise<CashflowResponse> {
     const rows = await this.prisma.$queryRaw<CashflowRow[]>(
       Prisma.sql`
-        SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
-               COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
-               COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense
-        FROM "Transaction"
-        WHERE "familyId" = ${user.familyId}
-          AND "deletedAt" IS NULL
-          AND status = 'CONFIRMED'
-          ${from ? Prisma.sql`AND date >= ${from}` : Prisma.empty}
-          ${to ? Prisma.sql`AND date <= ${to}` : Prisma.empty}
+        SELECT to_char(date_trunc('month', t.date), 'YYYY-MM') AS month,
+               COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END), 0) AS expense
+        FROM "Transaction" t
+        JOIN "Account" a ON a.id = t."accountId"
+        WHERE t."familyId" = ${user.familyId}
+          AND t."deletedAt" IS NULL
+          AND t.status = 'CONFIRMED'
+          AND ${ACTIVE_ACCOUNT_SQL}
+          ${from ? Prisma.sql`AND t.date >= ${from}` : Prisma.empty}
+          ${to ? Prisma.sql`AND t.date <= ${to}` : Prisma.empty}
         GROUP BY month
         ORDER BY month
       `,
@@ -433,17 +444,15 @@ export class ReportsService {
             AND t.status = 'CONFIRMED'
             AND t.date >= ${windowStart}
             AND t.date < ${windowEnd}
-            AND a."isArchived" = false
-            AND a."deletedAt" IS NULL
+            AND ${ACTIVE_ACCOUNT_SQL}
           GROUP BY month
         `,
       ),
       // "Saldo total" — same definition as the dashboard's stat card: sum of balance
-      // across active (non-archived, non-deleted) accounts. A receita/despesa média
-      // acima agora também exclui transações de contas arquivadas (join em Account),
-      // pra não divergir dessa mesma definição de "ativo" usada aqui.
+      // across active accounts. cashflow() joga o mesmo filtro, então os dois
+      // widgets do dashboard não divergem pro mesmo período.
       this.prisma.account.aggregate({
-        where: { familyId: user.familyId, deletedAt: null, isArchived: false },
+        where: { familyId: user.familyId, ...ACTIVE_ACCOUNT_WHERE },
         _sum: { balance: true },
       }),
       this.prisma.family.findUniqueOrThrow({

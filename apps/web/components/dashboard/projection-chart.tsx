@@ -98,8 +98,9 @@ export function ProjectionChart({ refreshToken }: Props) {
         </div>
       </div>
       <Card>
-        {error ? <ErrorBox>{error}</ErrorBox> : null}
-        {loading ? (
+        {error ? (
+          <ErrorBox>{error}</ErrorBox>
+        ) : loading ? (
           <Spinner />
         ) : !projection || chartData.length === 0 ? (
           <p className="empty">Sem dados suficientes para projetar o saldo.</p>
