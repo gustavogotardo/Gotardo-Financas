@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.module';
 import { MlClient } from '../ml/ml.client';
 import { DebtsService } from '../debts/debts.service';
 import { GoalsService } from '../goals/goals.service';
+import { addMonthsUtc } from '../common/date-utils';
 import type { AuthUser } from '../common/auth-user';
 import type { ProjectionQueryDto } from './dto/projection-query.dto';
 
@@ -422,20 +423,25 @@ export class ReportsService {
     const [rows, balanceAgg, family] = await Promise.all([
       this.prisma.$queryRaw<CashflowRow[]>(
         Prisma.sql`
-          SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
-                 COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
-                 COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense
-          FROM "Transaction"
-          WHERE "familyId" = ${user.familyId}
-            AND "deletedAt" IS NULL
-            AND status = 'CONFIRMED'
-            AND date >= ${windowStart}
-            AND date < ${windowEnd}
+          SELECT to_char(date_trunc('month', t.date), 'YYYY-MM') AS month,
+                 COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END), 0) AS income,
+                 COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END), 0) AS expense
+          FROM "Transaction" t
+          JOIN "Account" a ON a.id = t."accountId"
+          WHERE t."familyId" = ${user.familyId}
+            AND t."deletedAt" IS NULL
+            AND t.status = 'CONFIRMED'
+            AND t.date >= ${windowStart}
+            AND t.date < ${windowEnd}
+            AND a."isArchived" = false
+            AND a."deletedAt" IS NULL
           GROUP BY month
         `,
       ),
       // "Saldo total" — same definition as the dashboard's stat card: sum of balance
-      // across active (non-archived, non-deleted) accounts.
+      // across active (non-archived, non-deleted) accounts. A receita/despesa média
+      // acima agora também exclui transações de contas arquivadas (join em Account),
+      // pra não divergir dessa mesma definição de "ativo" usada aqui.
       this.prisma.account.aggregate({
         where: { familyId: user.familyId, deletedAt: null, isArchived: false },
         _sum: { balance: true },
@@ -585,11 +591,12 @@ export class ReportsService {
     );
     const monthlyInflation = baseMonthlyInflation.plus(inflationDelta);
 
-    const [{ avgIncome, avgExpense, totalBalance }, goalsList, debtsList] = await Promise.all([
-      this.trailingThreeMonthAverages(user),
-      this.goals.list(user),
-      this.debts.list(user),
-    ]);
+    const [{ avgIncome, avgExpense, totalBalance, windowEnd }, goalsList, debtsList] =
+      await Promise.all([
+        this.trailingThreeMonthAverages(user),
+        this.goals.list(user),
+        this.debts.list(user),
+      ]);
 
     // §9.3 "Capacidade de Poupança" reusa a mesma média móvel de 3 meses do
     // `healthIndicators()` como ponto de partida da renda/despesa base.
@@ -606,7 +613,12 @@ export class ReportsService {
         new Prisma.Decimal(0),
       );
 
-    const now = new Date();
+    // Deriva os meses projetados de `windowEnd` (já calculado por
+    // trailingThreeMonthAverages) em vez de um novo `new Date()` — evitando
+    // reintroduzir a mesma corrida de "agora" na virada de mês que a extração
+    // desse helper eliminou para healthIndicators(). `windowEnd` já é o
+    // início do mês seguinte ao corrente (dia 1), então addMonthsUtc(windowEnd,
+    // m - 1) dá o mês `m` a partir de hoje.
     const growthFactorBase = new Prisma.Decimal(1).plus(incomeGrowthRate);
     const inflationFactorBase = new Prisma.Decimal(1).plus(monthlyInflation);
 
@@ -627,7 +639,7 @@ export class ReportsService {
         .plus(income)
         .minus(expense);
 
-      const monthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + m, 1));
+      const monthDate = addMonthsUtc(windowEnd, m - 1);
       monthsOut.push({
         month: this.monthKey(monthDate),
         income: income.toFixed(2),

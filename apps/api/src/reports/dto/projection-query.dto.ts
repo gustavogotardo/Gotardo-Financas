@@ -41,12 +41,16 @@ export class ProjectionQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
+  @Max(5)
   incomeMultiplier?: number;
 
   /** Só é considerado quando `scenario=CUSTOM`. */
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
+  @Max(5)
   expenseMultiplier?: number;
 
   /** Só é considerado quando `scenario=CUSTOM`. */

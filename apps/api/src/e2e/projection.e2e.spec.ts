@@ -372,4 +372,39 @@ describe('Motor de projeção (e2e)', () => {
     expect(body.goalMonthlyContribution).toBe('200.00');
     expect(body.debtInstallmentTotal).toBe('100.00');
   });
+
+  it('cenário CUSTOM aplica os multiplicadores/delta informados via query', async () => {
+    const { token, familyId } = await setupFamily('custom-scenario');
+    await seedTrailingHistory(token, familyId);
+
+    const res = await getProjection(token, {
+      scenario: 'CUSTOM',
+      months: 1,
+      incomeMultiplier: 2,
+      expenseMultiplier: 0,
+      inflationDelta: 0,
+    });
+    expect(res.status).toBe(200);
+    const body = res.body as ProjectionResponse;
+    expect(body.scenario).toBe('CUSTOM');
+    // avgIncome=3000 (ver seedTrailingHistory) × multiplicador 2 = 6000; despesa zerada.
+    expect(body.months[0]?.income).toBe('6000.00');
+    expect(body.months[0]?.expense).toBe('0.00');
+  });
+
+  it('rejeita incomeMultiplier/expenseMultiplier fora do intervalo permitido', async () => {
+    const { token } = await setupFamily('custom-bounds');
+
+    const negative = await getProjection(token, {
+      scenario: 'CUSTOM',
+      incomeMultiplier: -50,
+    });
+    expect(negative.status).toBe(400);
+
+    const tooHigh = await getProjection(token, {
+      scenario: 'CUSTOM',
+      expenseMultiplier: 999,
+    });
+    expect(tooHigh.status).toBe(400);
+  });
 });
