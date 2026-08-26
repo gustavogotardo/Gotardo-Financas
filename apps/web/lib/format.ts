@@ -52,6 +52,29 @@ export function monthsRange(monthsBack: number): { from: string; to: string } {
   return { from: toISODate(from), to: toISODate(to) };
 }
 
+const MONTH_ABBREVIATIONS = [
+  'jan',
+  'fev',
+  'mar',
+  'abr',
+  'mai',
+  'jun',
+  'jul',
+  'ago',
+  'set',
+  'out',
+  'nov',
+  'dez',
+];
+
+/** Formats a "YYYY-MM" month key as a short pt-BR label, e.g. "2026-01" -> "jan/26". */
+export function monthShortLabel(month: string): string {
+  const [year, monthNumber] = month.split('-');
+  if (!year || !monthNumber) return month;
+  const abbreviation = MONTH_ABBREVIATIONS[Number(monthNumber) - 1] ?? monthNumber;
+  return `${abbreviation}/${year.slice(2)}`;
+}
+
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   CHECKING: 'Conta corrente',
   SAVINGS: 'Poupança',

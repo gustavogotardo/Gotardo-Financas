@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import { apiFetch, type ProjectionResponse } from '@/lib/api';
-import { brl } from '@/lib/format';
+import { brl, monthShortLabel } from '@/lib/format';
 import { Card, ErrorBox, Select, Spinner, StatCard } from '@/components/ui';
 
 const SCENARIO_OPTIONS = [
@@ -26,35 +26,17 @@ const MONTHS_OPTIONS = [
   { value: 12, label: '12 meses' },
 ];
 
-const MONTH_ABBREVIATIONS = [
-  'jan',
-  'fev',
-  'mar',
-  'abr',
-  'mai',
-  'jun',
-  'jul',
-  'ago',
-  'set',
-  'out',
-  'nov',
-  'dez',
-];
-
-/** Formats a "YYYY-MM" month key as a short pt-BR label, e.g. "2026-01" -> "jan/26". */
-function monthShortLabel(month: string): string {
-  const [year, monthNumber] = month.split('-');
-  if (!year || !monthNumber) return month;
-  const abbreviation = MONTH_ABBREVIATIONS[Number(monthNumber) - 1] ?? monthNumber;
-  return `${abbreviation}/${year.slice(2)}`;
-}
-
 type ChartPoint = {
   label: string;
   balance: number;
 };
 
-export function ProjectionChart() {
+type Props = {
+  /** Bumped by the parent whenever dashboard data reloads, to trigger a refetch here too. */
+  refreshToken?: number;
+};
+
+export function ProjectionChart({ refreshToken }: Props) {
   const [scenario, setScenario] = useState('BASE');
   const [months, setMonths] = useState(6);
   const [projection, setProjection] = useState<ProjectionResponse | null>(null);
@@ -74,6 +56,7 @@ export function ProjectionChart() {
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Falha ao carregar a projeção.');
+          setProjection(null);
         }
       })
       .finally(() => {
@@ -82,7 +65,7 @@ export function ProjectionChart() {
     return () => {
       cancelled = true;
     };
-  }, [scenario, months]);
+  }, [scenario, months, refreshToken]);
 
   const chartData: ChartPoint[] = useMemo(
     () =>

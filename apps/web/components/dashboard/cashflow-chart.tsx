@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { apiFetch, type CashflowResponse } from '@/lib/api';
-import { brl, monthsRange } from '@/lib/format';
+import { brl, monthShortLabel, monthsRange } from '@/lib/format';
 import { Card, ErrorBox, Select, Spinner } from '@/components/ui';
 
 const PERIOD_OPTIONS = [
@@ -20,29 +20,6 @@ const PERIOD_OPTIONS = [
   { value: 6, label: 'Últimos 6 meses' },
   { value: 12, label: 'Últimos 12 meses' },
 ];
-
-const MONTH_ABBREVIATIONS = [
-  'jan',
-  'fev',
-  'mar',
-  'abr',
-  'mai',
-  'jun',
-  'jul',
-  'ago',
-  'set',
-  'out',
-  'nov',
-  'dez',
-];
-
-/** Formats a "YYYY-MM" month key as a short pt-BR label, e.g. "2026-01" -> "jan/26". */
-function monthShortLabel(month: string): string {
-  const [year, monthNumber] = month.split('-');
-  if (!year || !monthNumber) return month;
-  const abbreviation = MONTH_ABBREVIATIONS[Number(monthNumber) - 1] ?? monthNumber;
-  return `${abbreviation}/${year.slice(2)}`;
-}
 
 type ChartPoint = {
   label: string;

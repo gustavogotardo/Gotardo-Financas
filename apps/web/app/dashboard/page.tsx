@@ -185,7 +185,7 @@ export default function DashboardPage() {
 
             <CashflowChart refreshToken={version} />
 
-            <ProjectionChart />
+            <ProjectionChart refreshToken={version} />
 
             <AccountsSection accounts={data.accounts} canManage={canManage} onReload={reload} />
 
