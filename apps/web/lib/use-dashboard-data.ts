@@ -9,6 +9,7 @@ import {
   type CashflowResponse,
   type CategoryExpenseRow,
   type CategoryRecord,
+  type DebtRecord,
   type EnvelopeExpenseRow,
   type EnvelopeRecord,
   type ImportRecord,
@@ -23,6 +24,7 @@ export type DashboardData = {
   categories: CategoryRecord[];
   envelopes: EnvelopeRecord[];
   incomeSources: IncomeSourceRecord[];
+  debts: DebtRecord[];
   imports: ImportRecord[];
   cashflow: CashflowResponse;
   paymentMethods: PaymentMethodRow[];
@@ -67,6 +69,7 @@ export function useDashboardData(
         categories,
         envelopes,
         incomeSources,
+        debts,
         imports,
         cashflow,
         paymentMethods,
@@ -79,6 +82,7 @@ export function useDashboardData(
         apiFetch<CategoryRecord[]>('/api/v1/categories'),
         apiFetch<EnvelopeRecord[]>('/api/v1/envelopes'),
         apiFetch<IncomeSourceRecord[]>('/api/v1/income-sources'),
+        apiFetch<DebtRecord[]>('/api/v1/debts'),
         apiFetch<ImportRecord[]>('/api/v1/imports'),
         apiFetch<CashflowResponse>(`/api/v1/reports/cashflow?from=${range.from}&to=${range.to}`),
         apiFetch<PaymentMethodRow[]>(
@@ -103,6 +107,7 @@ export function useDashboardData(
         categories,
         envelopes,
         incomeSources,
+        debts,
         imports,
         cashflow,
         paymentMethods,

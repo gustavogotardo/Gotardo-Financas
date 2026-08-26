@@ -133,6 +133,16 @@ export function goalStrategyLabel(strategy: string): string {
   return GOAL_STRATEGY_LABELS[strategy] ?? strategy;
 }
 
+const DEBT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Ativa',
+  PAID_OFF: 'Quitada',
+  CANCELLED: 'Cancelada',
+};
+
+export function debtStatusLabel(status: string): string {
+  return DEBT_STATUS_LABELS[status] ?? status;
+}
+
 const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   BUDGET_EXCEEDED: 'Orçamento estourado',
   ANOMALY_DETECTED: 'Despesa fora do padrão',

@@ -12,6 +12,7 @@ import { AccountStatementSection } from '@/components/dashboard/account-statemen
 import { CashflowChart } from '@/components/dashboard/cashflow-chart';
 import { CategoriesSection } from '@/components/dashboard/categories-section';
 import { CategoryChart } from '@/components/dashboard/category-chart';
+import { DebtsSection } from '@/components/dashboard/debts-section';
 import { EnvelopesSection } from '@/components/dashboard/envelopes-section';
 import { HealthIndicatorsSection } from '@/components/dashboard/health-indicators-section';
 import { ImportsSection } from '@/components/dashboard/imports-section';
@@ -198,6 +199,8 @@ export default function DashboardPage() {
               canManage={canManage}
               onReload={reload}
             />
+
+            <DebtsSection debts={data.debts} canManage={canManage} onReload={reload} />
 
             <ImportsSection
               accounts={data.accounts}

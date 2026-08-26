@@ -97,6 +97,11 @@ export function HealthIndicatorsSection({ refreshToken }: Props) {
               value={formatIndicatorValue(indicators.incomeDiversification, '')}
               tone={STATUS_TONE[indicators.incomeDiversification.status]}
             />
+            <StatCard
+              label="Dívida/renda anual"
+              value={formatIndicatorValue(indicators.debtToIncomeRatio, '%')}
+              tone={STATUS_TONE[indicators.debtToIncomeRatio.status]}
+            />
           </div>
         )}
       </Card>

@@ -259,6 +259,45 @@ export type CreateGoalAllocationInput = {
   source?: string;
 };
 
+export type DebtRecord = {
+  id: string;
+  name: string;
+  creditor: string | null;
+  totalAmount: string;
+  interestRate: string | null;
+  installmentAmount: string | null;
+  dueDay: number | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  paidAmount: string;
+  remainingAmount: string;
+};
+
+export type CreateDebtInput = {
+  name: string;
+  creditor?: string;
+  totalAmount: number;
+  interestRate?: number;
+  installmentAmount?: number;
+  dueDay?: number;
+  status?: string;
+};
+
+export type DebtPaymentRecord = {
+  id: string;
+  amount: string;
+  date: string;
+  note: string | null;
+  createdAt: string;
+};
+
+export type CreateDebtPaymentInput = {
+  amount: number;
+  date?: string;
+  note?: string;
+};
+
 export type ImportRecord = {
   id: string;
   originalName: string;
@@ -333,6 +372,7 @@ export type HealthIndicatorsResponse = {
   essentialRatio: HealthIndicator;
   fixedRatio: HealthIndicator;
   incomeDiversification: HealthIndicator;
+  debtToIncomeRatio: HealthIndicator;
 };
 
 export function getAccountInvoice(accountId: string, period?: string): Promise<AccountInvoice> {
