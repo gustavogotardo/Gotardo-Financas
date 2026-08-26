@@ -14,6 +14,7 @@ import { IncomeSourcesModule } from './income-sources/income-sources.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { EnvelopesModule } from './envelopes/envelopes.module';
 import { GoalsModule } from './goals/goals.module';
+import { DebtsModule } from './debts/debts.module';
 import { ReportsModule } from './reports/reports.module';
 import { ImportsModule } from './imports/imports.module';
 import { MlModule } from './ml/ml.module';
@@ -37,6 +38,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     TransactionsModule,
     EnvelopesModule,
     GoalsModule,
+    DebtsModule,
     ReportsModule,
     ImportsModule,
     MlModule,

@@ -11,6 +11,7 @@ import { AccountsModule } from '../accounts/accounts.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { IncomeSourcesModule } from '../income-sources/income-sources.module';
 import { TransactionsModule } from '../transactions/transactions.module';
+import { DebtsModule } from '../debts/debts.module';
 import { ReportsModule } from '../reports/reports.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -44,9 +45,11 @@ type HealthIndicatorsResponse = {
   essentialRatio: HealthIndicator;
   fixedRatio: HealthIndicator;
   incomeDiversification: HealthIndicator;
+  debtToIncomeRatio: HealthIndicator;
 };
 
 type IncomeSourceResponse = { id: string; name: string };
+type DebtResponse = { id: string; status: string };
 
 describe('Indicadores de saúde financeira (e2e)', () => {
   let app: INestApplication;
@@ -113,6 +116,14 @@ describe('Indicadores de saúde financeira (e2e)', () => {
     return (res.body as IncomeSourceResponse).id;
   };
 
+  const createDebt = async (token: string, body: Record<string, unknown>): Promise<DebtResponse> => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/debts')
+      .set('Authorization', `Bearer ${token}`)
+      .send(body);
+    return res.body as DebtResponse;
+  };
+
   /** Start-of-month date, `monthsAgo` calendar months before "now" (0 = current month). */
   const monthDate = (monthsAgo: number, day = 10): Date => {
     const now = new Date();
@@ -129,6 +140,7 @@ describe('Indicadores de saúde financeira (e2e)', () => {
         CategoriesModule,
         IncomeSourcesModule,
         TransactionsModule,
+        DebtsModule,
         ReportsModule,
       ],
       providers: [
@@ -149,6 +161,8 @@ describe('Indicadores de saúde financeira (e2e)', () => {
   afterAll(async () => {
     await prisma.$transaction([
       prisma.transaction.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      prisma.debtPayment.deleteMany({ where: { debt: { familyId: { in: createdFamilies } } } }),
+      prisma.debt.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.incomeSource.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.category.deleteMany({ where: { familyId: { in: createdFamilies } } }),
       prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } }),
@@ -640,5 +654,131 @@ describe('Indicadores de saúde financeira (e2e)', () => {
     const body = res.body as HealthIndicatorsResponse;
     expect(body.incomeDiversification.value).toBe('3');
     expect(body.incomeDiversification.status).toBe('good');
+  });
+
+  it('calcula debtToIncomeRatio "good" quando o saldo devedor é pequeno frente à renda anual', async () => {
+    const { token, familyId } = await setupFamily('debt-to-income-good');
+    const accountId = await createAccount(token);
+    await prisma.family.update({ where: { id: familyId }, data: { createdAt: monthDate(2) } });
+
+    // Trailing 3-month avgIncome = 3000 -> annualIncome = 36000.
+    for (let monthsAgo = 0; monthsAgo <= 2; monthsAgo++) {
+      await createTransaction(token, {
+        accountId,
+        description: 'Salário',
+        amount: 3000,
+        type: 'INCOME',
+        date: monthDate(monthsAgo).toISOString(),
+      });
+    }
+
+    await createDebt(token, { name: 'Empréstimo pequeno', totalAmount: 5000 });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    // 5000 / 36000 * 100 = 13.9 -> < 30 -> good
+    expect(body.debtToIncomeRatio.value).toBe('13.9');
+    expect(body.debtToIncomeRatio.status).toBe('good');
+    expect(body.debtToIncomeRatio.trend).toBeNull();
+  });
+
+  it('calcula debtToIncomeRatio "warning" quando o saldo devedor está na faixa intermediária', async () => {
+    const { token, familyId } = await setupFamily('debt-to-income-warning');
+    const accountId = await createAccount(token);
+    await prisma.family.update({ where: { id: familyId }, data: { createdAt: monthDate(2) } });
+
+    for (let monthsAgo = 0; monthsAgo <= 2; monthsAgo++) {
+      await createTransaction(token, {
+        accountId,
+        description: 'Salário',
+        amount: 3000,
+        type: 'INCOME',
+        date: monthDate(monthsAgo).toISOString(),
+      });
+    }
+
+    await createDebt(token, { name: 'Financiamento', totalAmount: 14400 });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    // 14400 / 36000 * 100 = 40.0 -> não é < 30 nem > 50 -> warning
+    expect(body.debtToIncomeRatio.value).toBe('40.0');
+    expect(body.debtToIncomeRatio.status).toBe('warning');
+  });
+
+  it('calcula debtToIncomeRatio "critical" quando o saldo devedor é alto frente à renda anual', async () => {
+    const { token, familyId } = await setupFamily('debt-to-income-critical');
+    const accountId = await createAccount(token);
+    await prisma.family.update({ where: { id: familyId }, data: { createdAt: monthDate(2) } });
+
+    for (let monthsAgo = 0; monthsAgo <= 2; monthsAgo++) {
+      await createTransaction(token, {
+        accountId,
+        description: 'Salário',
+        amount: 3000,
+        type: 'INCOME',
+        date: monthDate(monthsAgo).toISOString(),
+      });
+    }
+
+    await createDebt(token, { name: 'Dívida alta', totalAmount: 20000 });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    // 20000 / 36000 * 100 = 55.6 -> > 50 -> critical
+    expect(body.debtToIncomeRatio.value).toBe('55.6');
+    expect(body.debtToIncomeRatio.status).toBe('critical');
+  });
+
+  it('não quebra quando não há renda (divisão por zero) e retorna resposta neutra', async () => {
+    const { token } = await setupFamily('debt-to-income-zero-income');
+    await createDebt(token, { name: 'Dívida qualquer', totalAmount: 1000 });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    expect(body.debtToIncomeRatio.value).toBe('0.0');
+    expect(body.debtToIncomeRatio.status).toBe('warning');
+    expect(body.debtToIncomeRatio.trend).toBeNull();
+  });
+
+  it('exclui dívidas PAID_OFF/CANCELLED da soma mesmo com remainingAmount não-zero', async () => {
+    const { token, familyId } = await setupFamily('debt-to-income-exclude-inactive');
+    const accountId = await createAccount(token);
+    await prisma.family.update({ where: { id: familyId }, data: { createdAt: monthDate(2) } });
+
+    for (let monthsAgo = 0; monthsAgo <= 2; monthsAgo++) {
+      await createTransaction(token, {
+        accountId,
+        description: 'Salário',
+        amount: 3000,
+        type: 'INCOME',
+        date: monthDate(monthsAgo).toISOString(),
+      });
+    }
+
+    // Dívida ativa: entra na soma.
+    await createDebt(token, { name: 'Dívida ativa', totalAmount: 5000 });
+
+    // Dívida cancelada com saldo alto não pago: não deve contar, mesmo que
+    // seu `remainingAmount` continue positivo.
+    const cancelled = await createDebt(token, {
+      name: 'Dívida cancelada',
+      totalAmount: 999999,
+    });
+    await request(app.getHttpServer())
+      .patch(`/api/v1/debts/${cancelled.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'CANCELLED' });
+
+    const res = await getHealthIndicators(token);
+    expect(res.status).toBe(200);
+    const body = res.body as HealthIndicatorsResponse;
+    // Apenas a dívida ativa (5000) entra na soma: 5000 / 36000 * 100 = 13.9 -> good
+    expect(body.debtToIncomeRatio.value).toBe('13.9');
+    expect(body.debtToIncomeRatio.status).toBe('good');
   });
 });

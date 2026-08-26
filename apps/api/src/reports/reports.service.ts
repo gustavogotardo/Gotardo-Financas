@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PaymentMethod, Prisma, TransactionStatus, TransactionType } from '@gotardo/db';
+import { DebtStatus, PaymentMethod, Prisma, TransactionStatus, TransactionType } from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import { MlClient } from '../ml/ml.client';
+import { DebtsService } from '../debts/debts.service';
 import type { AuthUser } from '../common/auth-user';
 
 export type PaymentMethodRow = {
@@ -100,6 +101,7 @@ export type HealthIndicatorsResponse = {
   essentialRatio: HealthIndicator;
   fixedRatio: HealthIndicator;
   incomeDiversification: HealthIndicator;
+  debtToIncomeRatio: HealthIndicator;
 };
 
 const CONFIRMED = TransactionStatus.CONFIRMED;
@@ -112,6 +114,7 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ml: MlClient,
+    private readonly debts: DebtsService,
   ) {}
 
   async cashflow(user: AuthUser, from?: Date, to?: Date): Promise<CashflowResponse> {
@@ -361,9 +364,9 @@ export class ReportsService {
 
   /**
    * §2.9 / §27.1 "Indicadores de Saúde" — Taxa de Poupança, Reserva de Emergência,
-   * Comprometimento de Renda, Gasto Essencial/Total, Recorrência/Total e
-   * Diversificação de Fontes. The other indicator from §27.1 (Dívida/Renda) is out
-   * of scope: this app has no debt tracking to compute it from.
+   * Comprometimento de Renda, Gasto Essencial/Total, Recorrência/Total,
+   * Diversificação de Fontes e Dívida/Renda Anual. All 7 §27.1 indicators are
+   * implemented.
    */
   async healthIndicators(user: AuthUser): Promise<HealthIndicatorsResponse> {
     const now = new Date();
@@ -390,8 +393,15 @@ export class ReportsService {
       date: { gte: currentMonthStart, lt: currentMonthEnd },
     };
 
-    const [rows, balanceAgg, family, essentialExpenseAgg, fixedExpenseAgg, incomeSourceGroups] =
-      await Promise.all([
+    const [
+      rows,
+      balanceAgg,
+      family,
+      essentialExpenseAgg,
+      fixedExpenseAgg,
+      incomeSourceGroups,
+      debtsList,
+    ] = await Promise.all([
         this.prisma.$queryRaw<CashflowRow[]>(
           Prisma.sql`
           SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
@@ -443,6 +453,11 @@ export class ReportsService {
             date: { gte: currentMonthStart, lt: currentMonthEnd },
           },
         }),
+        // Dívida/Renda Anual (§27.1): reusa `DebtsService.list` (mesma
+        // agregação de `remainingAmount` usada pela tela de dívidas) em vez de
+        // recalcular o saldo devedor aqui — mantém uma única fonte de verdade
+        // para "quanto ainda falta pagar" de cada dívida.
+        this.debts.list(user),
       ]);
 
     const byMonth = new Map(rows.map((row) => [row.month, row]));
@@ -478,12 +493,21 @@ export class ReportsService {
     const essentialExpense = essentialExpenseAgg._sum.amount ?? new Prisma.Decimal(0);
     const fixedExpense = fixedExpenseAgg._sum.amount ?? new Prisma.Decimal(0);
 
+    // Dívida/Renda Anual: soma o saldo devedor (`remainingAmount`) apenas das
+    // dívidas ACTIVE — uma dívida quitada (PAID_OFF) ou cancelada
+    // (CANCELLED) não deve pesar no indicador mesmo que ainda carregue um
+    // `remainingAmount` residual não-zero.
+    const totalRemainingDebt = debtsList
+      .filter((debt) => debt.status === DebtStatus.ACTIVE)
+      .reduce((acc, debt) => acc.plus(debt.remainingAmount), new Prisma.Decimal(0));
+
     return {
       savingsRate: this.buildSavingsRate(currentIncome, currentExpense, previousRow),
       emergencyReserve: this.buildEmergencyReserve(totalBalance, avgExpense),
       commitment: this.buildCommitment(avgExpense, avgIncome),
       essentialRatio: this.buildEssentialRatio(essentialExpense, currentExpense),
       fixedRatio: this.buildFixedRatio(fixedExpense, currentExpense),
+      debtToIncomeRatio: this.buildDebtToIncomeRatio(totalRemainingDebt, avgIncome),
       incomeDiversification: this.buildIncomeDiversification(incomeSourceGroups.length),
     };
   }
@@ -582,6 +606,19 @@ export class ReportsService {
     totalExpense: Prisma.Decimal,
   ): HealthIndicator {
     return this.buildLowerIsBetterRatio(fixedExpense, totalExpense, 50, 70);
+  }
+
+  /**
+   * Dívida/Renda Anual (§27.1) — saldo devedor total das dívidas ACTIVE sobre
+   * a renda anualizada (média móvel de 3 meses × 12). Lower is better: quanto
+   * maior a dívida remanescente em relação à renda anual, maior o risco.
+   */
+  private buildDebtToIncomeRatio(
+    totalRemainingDebt: Prisma.Decimal,
+    avgIncome: Prisma.Decimal,
+  ): HealthIndicator {
+    const annualIncome = avgIncome.times(12);
+    return this.buildLowerIsBetterRatio(totalRemainingDebt, annualIncome, 30, 50);
   }
 
   /**
