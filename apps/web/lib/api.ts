@@ -375,6 +375,22 @@ export type HealthIndicatorsResponse = {
   debtToIncomeRatio: HealthIndicator;
 };
 
+export type ProjectionMonth = {
+  month: string;
+  income: string;
+  expense: string;
+  savingsCapacity: string;
+  balance: string;
+};
+
+export type ProjectionResponse = {
+  scenario: 'CONSERVATIVE' | 'BASE' | 'OPTIMISTIC' | 'CUSTOM';
+  startingBalance: string;
+  goalMonthlyContribution: string;
+  debtInstallmentTotal: string;
+  months: ProjectionMonth[];
+};
+
 export function getAccountInvoice(accountId: string, period?: string): Promise<AccountInvoice> {
   return apiFetch<AccountInvoice>(
     `/api/v1/accounts/${accountId}/invoice${period ? `?period=${period}` : ''}`,

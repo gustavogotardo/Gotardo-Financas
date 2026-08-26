@@ -17,6 +17,7 @@ import { EnvelopesSection } from '@/components/dashboard/envelopes-section';
 import { HealthIndicatorsSection } from '@/components/dashboard/health-indicators-section';
 import { ImportsSection } from '@/components/dashboard/imports-section';
 import { IncomeSourcesSection } from '@/components/dashboard/income-sources-section';
+import { ProjectionChart } from '@/components/dashboard/projection-chart';
 import { TransactionsSection } from '@/components/dashboard/transactions-section';
 import { NotificationBell } from '@/components/notification-bell';
 
@@ -183,6 +184,8 @@ export default function DashboardPage() {
             <HealthIndicatorsSection refreshToken={version} />
 
             <CashflowChart refreshToken={version} />
+
+            <ProjectionChart />
 
             <AccountsSection accounts={data.accounts} canManage={canManage} onReload={reload} />
 

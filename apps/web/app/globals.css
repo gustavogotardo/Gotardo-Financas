@@ -300,6 +300,12 @@ a:hover {
   margin: 0;
 }
 
+.section-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .form-card {
   margin-bottom: 1.25rem;
 }
