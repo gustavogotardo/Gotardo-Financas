@@ -8,10 +8,12 @@ import {
   type EnvelopeExpenseRow,
   type HealthIndicatorsResponse,
   type PaymentMethodRow,
+  type ProjectionResponse,
 } from './reports.service';
 import type { AuthUser } from '../common/auth-user';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ReportRangeDto } from './dto/report-range.dto';
+import { ProjectionQueryDto } from './dto/projection-query.dto';
 
 @Controller('reports')
 export class ReportsController {
@@ -60,6 +62,14 @@ export class ReportsController {
   @Get('health-indicators')
   healthIndicators(@CurrentUser() user: AuthUser): Promise<HealthIndicatorsResponse> {
     return this.reports.healthIndicators(user);
+  }
+
+  @Get('projection')
+  projection(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ProjectionQueryDto,
+  ): Promise<ProjectionResponse> {
+    return this.reports.projection(user, query);
   }
 
   @Get('account-statement/:accountId')

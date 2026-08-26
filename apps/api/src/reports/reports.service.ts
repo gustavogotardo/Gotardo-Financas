@@ -1,9 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { DebtStatus, PaymentMethod, Prisma, TransactionStatus, TransactionType } from '@gotardo/db';
+import {
+  DebtStatus,
+  GoalStatus,
+  PaymentMethod,
+  Prisma,
+  TransactionStatus,
+  TransactionType,
+} from '@gotardo/db';
 import { PrismaService } from '../prisma/prisma.module';
 import { MlClient } from '../ml/ml.client';
 import { DebtsService } from '../debts/debts.service';
+import { GoalsService } from '../goals/goals.service';
 import type { AuthUser } from '../common/auth-user';
+import type { ProjectionQueryDto } from './dto/projection-query.dto';
 
 export type PaymentMethodRow = {
   method: string | null;
@@ -104,6 +113,30 @@ export type HealthIndicatorsResponse = {
   debtToIncomeRatio: HealthIndicator;
 };
 
+export type ProjectionScenario = 'CONSERVATIVE' | 'BASE' | 'OPTIMISTIC' | 'CUSTOM';
+
+export type ProjectionMonth = {
+  month: string;
+  income: string;
+  expense: string;
+  savingsCapacity: string;
+  balance: string;
+};
+
+export type ProjectionResponse = {
+  scenario: ProjectionScenario;
+  startingBalance: string;
+  goalMonthlyContribution: string;
+  debtInstallmentTotal: string;
+  months: ProjectionMonth[];
+};
+
+type ScenarioParams = {
+  incomeMultiplier: Prisma.Decimal;
+  expenseMultiplier: Prisma.Decimal;
+  inflationDelta: Prisma.Decimal;
+};
+
 const CONFIRMED = TransactionStatus.CONFIRMED;
 
 /** Trend is only "meaningful" once the delta exceeds this many percentage points. */
@@ -115,6 +148,7 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly ml: MlClient,
     private readonly debts: DebtsService,
+    private readonly goals: GoalsService,
   ) {}
 
   async cashflow(user: AuthUser, from?: Date, to?: Date): Promise<CashflowResponse> {
@@ -363,47 +397,31 @@ export class ReportsService {
   }
 
   /**
-   * §2.9 / §27.1 "Indicadores de Saúde" — Taxa de Poupança, Reserva de Emergência,
-   * Comprometimento de Renda, Gasto Essencial/Total, Recorrência/Total,
-   * Diversificação de Fontes e Dívida/Renda Anual. All 7 §27.1 indicators are
-   * implemented.
+   * Trailing 3 calendar months = the current (possibly partial) month plus the two
+   * full calendar months before it. E.g. on any day in 2026-08 the window is
+   * [2026-06-01, 2026-09-01). Shared by `healthIndicators()` (commitment/emergency
+   * reserve) and `projection()` (the projection engine's base income/expense/balance),
+   * so both report the same underlying trailing-average numbers.
    */
-  async healthIndicators(user: AuthUser): Promise<HealthIndicatorsResponse> {
+  private async trailingThreeMonthAverages(user: AuthUser): Promise<{
+    rows: CashflowRow[];
+    windowStart: Date;
+    windowEnd: Date;
+    avgIncome: Prisma.Decimal;
+    avgExpense: Prisma.Decimal;
+    totalBalance: Prisma.Decimal;
+  }> {
     const now = new Date();
     // Mês corrente/anterior calculados em UTC, mesma convenção já usada em
     // todo o resto do app pra "que mês é agora" (AccountsService.getInvoice,
     // NotificationsCheckerService, GoalsService) — evita depender do fuso do
     // processo do servidor.
-    const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const currentMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-    const previousMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-    /**
-     * Trailing 3 calendar months = the current (possibly partial) month plus the two
-     * full calendar months before it. E.g. on any day in 2026-08 the window is
-     * [2026-06-01, 2026-09-01).
-     */
     const windowStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
     const windowEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-    const currentMonthExpenseWhere: Prisma.TransactionWhereInput = {
-      familyId: user.familyId,
-      deletedAt: null,
-      status: CONFIRMED,
-      type: TransactionType.EXPENSE,
-      date: { gte: currentMonthStart, lt: currentMonthEnd },
-    };
-
-    const [
-      rows,
-      balanceAgg,
-      family,
-      essentialExpenseAgg,
-      fixedExpenseAgg,
-      incomeSourceGroups,
-      debtsList,
-    ] = await Promise.all([
-        this.prisma.$queryRaw<CashflowRow[]>(
-          Prisma.sql`
+    const [rows, balanceAgg, family] = await Promise.all([
+      this.prisma.$queryRaw<CashflowRow[]>(
+        Prisma.sql`
           SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
                  COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
                  COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense
@@ -415,17 +433,76 @@ export class ReportsService {
             AND date < ${windowEnd}
           GROUP BY month
         `,
-        ),
-        // "Saldo total" — same definition as the dashboard's stat card: sum of balance
-        // across active (non-archived, non-deleted) accounts.
-        this.prisma.account.aggregate({
-          where: { familyId: user.familyId, deletedAt: null, isArchived: false },
-          _sum: { balance: true },
-        }),
-        this.prisma.family.findUniqueOrThrow({
-          where: { id: user.familyId },
-          select: { createdAt: true },
-        }),
+      ),
+      // "Saldo total" — same definition as the dashboard's stat card: sum of balance
+      // across active (non-archived, non-deleted) accounts.
+      this.prisma.account.aggregate({
+        where: { familyId: user.familyId, deletedAt: null, isArchived: false },
+        _sum: { balance: true },
+      }),
+      this.prisma.family.findUniqueOrThrow({
+        where: { id: user.familyId },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    // Divide pelo número de meses do período que a família de fato já
+    // existia, não sempre por 3 — senão uma família nova (poucas semanas de
+    // histórico) tem a média artificialmente diluída por meses "vazios"
+    // anteriores à sua criação, subestimando despesa/receita médias (e, no
+    // caso da reserva de emergência, superestimando os meses de cobertura).
+    const familyCreatedMonthStart = new Date(
+      Date.UTC(family.createdAt.getUTCFullYear(), family.createdAt.getUTCMonth(), 1),
+    );
+    const effectiveWindowStart =
+      familyCreatedMonthStart > windowStart ? familyCreatedMonthStart : windowStart;
+    const monthsInWindow = Math.max(
+      1,
+      (windowEnd.getUTCFullYear() - effectiveWindowStart.getUTCFullYear()) * 12 +
+        (windowEnd.getUTCMonth() - effectiveWindowStart.getUTCMonth()),
+    );
+
+    const totalIncome3 = rows.reduce((acc, row) => acc.plus(row.income), new Prisma.Decimal(0));
+    const totalExpense3 = rows.reduce((acc, row) => acc.plus(row.expense), new Prisma.Decimal(0));
+    const avgIncome = totalIncome3.dividedBy(monthsInWindow);
+    const avgExpense = totalExpense3.dividedBy(monthsInWindow);
+    const totalBalance = balanceAgg._sum.balance ?? new Prisma.Decimal(0);
+
+    return { rows, windowStart, windowEnd, avgIncome, avgExpense, totalBalance };
+  }
+
+  /**
+   * §2.9 / §27.1 "Indicadores de Saúde" — Taxa de Poupança, Reserva de Emergência,
+   * Comprometimento de Renda, Gasto Essencial/Total, Recorrência/Total,
+   * Diversificação de Fontes e Dívida/Renda Anual. All 7 §27.1 indicators are
+   * implemented.
+   */
+  async healthIndicators(user: AuthUser): Promise<HealthIndicatorsResponse> {
+    const { rows, windowStart, windowEnd, avgIncome, avgExpense, totalBalance } =
+      await this.trailingThreeMonthAverages(user);
+
+    // currentMonthStart/currentMonthEnd/previousMonthStart derivam de
+    // windowStart/windowEnd (em vez de recalcular a partir de `new Date()`
+    // outra vez) pra garantir que usam exatamente o mesmo "agora" da janela
+    // de 3 meses acima, sem risco de uma corrida rara na virada do mês.
+    const currentMonthStart = new Date(
+      Date.UTC(windowEnd.getUTCFullYear(), windowEnd.getUTCMonth() - 1, 1),
+    );
+    const currentMonthEnd = windowEnd;
+    const previousMonthStart = new Date(
+      Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth() + 1, 1),
+    );
+
+    const currentMonthExpenseWhere: Prisma.TransactionWhereInput = {
+      familyId: user.familyId,
+      deletedAt: null,
+      status: CONFIRMED,
+      type: TransactionType.EXPENSE,
+      date: { gte: currentMonthStart, lt: currentMonthEnd },
+    };
+
+    const [essentialExpenseAgg, fixedExpenseAgg, incomeSourceGroups, debtsList] =
+      await Promise.all([
         // Gasto Essencial/Total (§27.1): soma das despesas do mês corrente cuja
         // categoria está marcada como essencial. Transações sem categoria, ou com
         // categoria não-essencial, não entram nessa soma (mas entram no total).
@@ -467,29 +544,6 @@ export class ReportsService {
     const currentIncome = currentRow?.income ?? new Prisma.Decimal(0);
     const currentExpense = currentRow?.expense ?? new Prisma.Decimal(0);
 
-    // Divide pelo número de meses do período que a família de fato já
-    // existia, não sempre por 3 — senão uma família nova (poucas semanas de
-    // histórico) tem a média artificialmente diluída por meses "vazios"
-    // anteriores à sua criação, subestimando despesa/receita médias (e, no
-    // caso da reserva de emergência, superestimando os meses de cobertura).
-    const familyCreatedMonthStart = new Date(
-      Date.UTC(family.createdAt.getUTCFullYear(), family.createdAt.getUTCMonth(), 1),
-    );
-    const effectiveWindowStart =
-      familyCreatedMonthStart > windowStart ? familyCreatedMonthStart : windowStart;
-    const monthsInWindow = Math.max(
-      1,
-      (windowEnd.getUTCFullYear() - effectiveWindowStart.getUTCFullYear()) * 12 +
-        (windowEnd.getUTCMonth() - effectiveWindowStart.getUTCMonth()),
-    );
-
-    const totalIncome3 = rows.reduce((acc, row) => acc.plus(row.income), new Prisma.Decimal(0));
-    const totalExpense3 = rows.reduce((acc, row) => acc.plus(row.expense), new Prisma.Decimal(0));
-    const avgIncome = totalIncome3.dividedBy(monthsInWindow);
-    const avgExpense = totalExpense3.dividedBy(monthsInWindow);
-
-    const totalBalance = balanceAgg._sum.balance ?? new Prisma.Decimal(0);
-
     const essentialExpense = essentialExpenseAgg._sum.amount ?? new Prisma.Decimal(0);
     const fixedExpense = fixedExpenseAgg._sum.amount ?? new Prisma.Decimal(0);
 
@@ -510,6 +564,117 @@ export class ReportsService {
       debtToIncomeRatio: this.buildDebtToIncomeRatio(totalRemainingDebt, avgIncome),
       incomeDiversification: this.buildIncomeDiversification(incomeSourceGroups.length),
     };
+  }
+
+  /**
+   * §9 "Motor de Projeção" — projeta saldo/renda/despesa mês a mês a partir das
+   * mesmas médias móveis de 3 meses usadas em `healthIndicators()`, aplicando os
+   * multiplicadores de um cenário (§9.2) e um crescimento de renda/inflação
+   * compostos mês a mês (§9.3). Puramente computado sob demanda — nada é
+   * persistido (cenários nomeados/salvos ficam para um épico futuro).
+   */
+  async projection(user: AuthUser, query: ProjectionQueryDto): Promise<ProjectionResponse> {
+    const scenario: ProjectionScenario = query.scenario ?? 'BASE';
+    const months = query.months ?? 6;
+    const incomeGrowthRate = new Prisma.Decimal(query.incomeGrowthRate ?? 0);
+    const baseMonthlyInflation = new Prisma.Decimal(query.baseMonthlyInflation ?? 0);
+
+    const { incomeMultiplier, expenseMultiplier, inflationDelta } = this.resolveScenario(
+      scenario,
+      query,
+    );
+    const monthlyInflation = baseMonthlyInflation.plus(inflationDelta);
+
+    const [{ avgIncome, avgExpense, totalBalance }, goalsList, debtsList] = await Promise.all([
+      this.trailingThreeMonthAverages(user),
+      this.goals.list(user),
+      this.debts.list(user),
+    ]);
+
+    // §9.3 "Capacidade de Poupança" reusa a mesma média móvel de 3 meses do
+    // `healthIndicators()` como ponto de partida da renda/despesa base.
+    const goalMonthlyContribution = goalsList
+      .filter((goal) => goal.status === GoalStatus.ACTIVE)
+      .reduce(
+        (acc, goal) => acc.plus(goal.monthlyContribution ?? new Prisma.Decimal(0)),
+        new Prisma.Decimal(0),
+      );
+    const debtInstallmentTotal = debtsList
+      .filter((debt) => debt.status === DebtStatus.ACTIVE)
+      .reduce(
+        (acc, debt) => acc.plus(debt.installmentAmount ?? new Prisma.Decimal(0)),
+        new Prisma.Decimal(0),
+      );
+
+    const now = new Date();
+    const growthFactorBase = new Prisma.Decimal(1).plus(incomeGrowthRate);
+    const inflationFactorBase = new Prisma.Decimal(1).plus(monthlyInflation);
+
+    let balance = totalBalance;
+    const monthsOut: ProjectionMonth[] = [];
+    for (let m = 1; m <= months; m++) {
+      const income = avgIncome.times(incomeMultiplier).times(growthFactorBase.pow(m));
+      const expense = avgExpense.times(expenseMultiplier).times(inflationFactorBase.pow(m));
+      const savingsCapacity = income.minus(expense);
+      // Simplificação conhecida e deliberada (§9, escopo deste primeiro corte
+      // do motor): `goalMonthlyContribution` e `debtInstallmentTotal` são
+      // aplicados como constantes fixas em todos os meses projetados, mesmo
+      // que na prática um objetivo possa ser concluído ou uma dívida quitada
+      // no meio da janela, liberando esse valor pros meses seguintes.
+      balance = balance
+        .minus(goalMonthlyContribution)
+        .minus(debtInstallmentTotal)
+        .plus(income)
+        .minus(expense);
+
+      const monthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + m, 1));
+      monthsOut.push({
+        month: this.monthKey(monthDate),
+        income: income.toFixed(2),
+        expense: expense.toFixed(2),
+        savingsCapacity: savingsCapacity.toFixed(2),
+        balance: balance.toFixed(2),
+      });
+    }
+
+    return {
+      scenario,
+      startingBalance: totalBalance.toFixed(2),
+      goalMonthlyContribution: goalMonthlyContribution.toFixed(2),
+      debtInstallmentTotal: debtInstallmentTotal.toFixed(2),
+      months: monthsOut,
+    };
+  }
+
+  /** §9.2 tabela de cenários — CUSTOM usa os overrides da query (default 1/1/0). */
+  private resolveScenario(scenario: ProjectionScenario, query: ProjectionQueryDto): ScenarioParams {
+    switch (scenario) {
+      case 'CONSERVATIVE':
+        return {
+          incomeMultiplier: new Prisma.Decimal(0.95),
+          expenseMultiplier: new Prisma.Decimal(1.05),
+          inflationDelta: new Prisma.Decimal(0.0008),
+        };
+      case 'OPTIMISTIC':
+        return {
+          incomeMultiplier: new Prisma.Decimal(1.05),
+          expenseMultiplier: new Prisma.Decimal(0.95),
+          inflationDelta: new Prisma.Decimal(-0.0004),
+        };
+      case 'CUSTOM':
+        return {
+          incomeMultiplier: new Prisma.Decimal(query.incomeMultiplier ?? 1),
+          expenseMultiplier: new Prisma.Decimal(query.expenseMultiplier ?? 1),
+          inflationDelta: new Prisma.Decimal(query.inflationDelta ?? 0),
+        };
+      case 'BASE':
+      default:
+        return {
+          incomeMultiplier: new Prisma.Decimal(1),
+          expenseMultiplier: new Prisma.Decimal(1),
+          inflationDelta: new Prisma.Decimal(0),
+        };
+    }
   }
 
   private monthKey(date: Date): string {
