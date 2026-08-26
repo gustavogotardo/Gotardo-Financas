@@ -27,16 +27,22 @@ export class UpdateDebtDto {
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
+  @Max(9_999_999_999.99)
   totalAmount?: number;
 
+  // Min(0), não IsPositive: um "parcelamento sem juros" (comum no Brasil)
+  // precisa poder registrar 0% explicitamente. Max casa com o teto da coluna
+  // Decimal(5,2) — acima disso o Prisma quebraria com erro não tratado.
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+  @Min(0)
+  @Max(999.99)
   interestRate?: number | null;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
+  @Max(9_999_999_999.99)
   installmentAmount?: number | null;
 
   @IsOptional()

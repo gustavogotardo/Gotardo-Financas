@@ -282,4 +282,29 @@ describe('Dívidas (e2e)', () => {
     const dbPayments = await prisma.debtPayment.findMany({ where: { debtId } });
     expect(dbPayments).toHaveLength(1);
   });
+
+  it('aceita interestRate 0 (parcelamento sem juros) e rejeita valores acima do teto da coluna', async () => {
+    const { token } = await setupFamily('interest-rate-bounds');
+
+    const zeroRate = await createDebt(token, {
+      name: 'Parcelamento sem juros',
+      totalAmount: 1000,
+      interestRate: 0,
+    });
+    expect(zeroRate.status).toBe(201);
+    expect((zeroRate.body as DebtResponse & { interestRate: string }).interestRate).toBe('0');
+
+    const tooHighRate = await createDebt(token, {
+      name: 'Dívida com juros inválidos',
+      totalAmount: 1000,
+      interestRate: 1234.56,
+    });
+    expect(tooHighRate.status).toBe(400);
+
+    const tooHighTotal = await createDebt(token, {
+      name: 'Dívida com valor inválido',
+      totalAmount: 99_999_999_999_999,
+    });
+    expect(tooHighTotal.status).toBe(400);
+  });
 });
