@@ -75,6 +75,12 @@ export enum NotificationSeverity {
   CRITICAL = 'CRITICAL',
 }
 
+export enum DebtStatus {
+  ACTIVE = 'ACTIVE',
+  PAID_OFF = 'PAID_OFF',
+  CANCELLED = 'CANCELLED',
+}
+
 export type ApiError = {
   code: ErrorCode;
   message: string;
