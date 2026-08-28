@@ -12,6 +12,8 @@ import {
   type DebtRecord,
   type EnvelopeExpenseRow,
   type EnvelopeRecord,
+  type FamilyMember,
+  type FamilyResponse,
   type ImportRecord,
   type IncomeSourceRecord,
   type PaymentMethodRow,
@@ -23,6 +25,7 @@ export type DashboardData = {
   accounts: AccountRecord[];
   categories: CategoryRecord[];
   envelopes: EnvelopeRecord[];
+  members: FamilyMember[];
   incomeSources: IncomeSourceRecord[];
   debts: DebtRecord[];
   imports: ImportRecord[];
@@ -68,6 +71,7 @@ export function useDashboardData(
       const [
         categories,
         envelopes,
+        members,
         incomeSources,
         debts,
         imports,
@@ -81,6 +85,7 @@ export function useDashboardData(
       ] = await Promise.all([
         apiFetch<CategoryRecord[]>('/api/v1/categories'),
         apiFetch<EnvelopeRecord[]>('/api/v1/envelopes'),
+        apiFetch<FamilyResponse>('/api/v1/family').then((family) => family.users),
         apiFetch<IncomeSourceRecord[]>('/api/v1/income-sources'),
         apiFetch<DebtRecord[]>('/api/v1/debts'),
         apiFetch<ImportRecord[]>('/api/v1/imports'),
@@ -106,6 +111,7 @@ export function useDashboardData(
         accounts,
         categories,
         envelopes,
+        members,
         incomeSources,
         debts,
         imports,

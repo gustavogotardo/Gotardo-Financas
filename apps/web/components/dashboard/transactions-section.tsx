@@ -4,24 +4,29 @@ import { useMemo, useState } from 'react';
 import {
   apiFetch,
   type AnomalyRow,
+  type FamilyMember,
   type PaymentMethodRow,
   type TransactionRecord,
 } from '@/lib/api';
 import { brl, formatDate, paymentMethodLabel, statusLabel, statusTone } from '@/lib/format';
-import { Badge, Button, Card, ErrorBox } from '@/components/ui';
+import { Badge, Button, Card, ErrorBox, Select } from '@/components/ui';
 
 type Props = {
   transactions: TransactionRecord[];
   paymentMethods: PaymentMethodRow[];
   anomalies: AnomalyRow[];
+  members: FamilyMember[];
   canManage: boolean;
   onReload: () => Promise<void>;
 };
+
+const SHARED_FILTER = '__shared__';
 
 export function TransactionsSection({
   transactions,
   paymentMethods,
   anomalies,
+  members,
   canManage,
   onReload,
 }: Props) {
@@ -29,6 +34,13 @@ export function TransactionsSection({
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [memberFilter, setMemberFilter] = useState('');
+
+  const filteredTransactions = useMemo(() => {
+    if (!memberFilter) return transactions;
+    if (memberFilter === SHARED_FILTER) return transactions.filter((tx) => !tx.memberId);
+    return transactions.filter((tx) => tx.memberId === memberFilter);
+  }, [transactions, memberFilter]);
 
   const anomalyById = useMemo(() => {
     const map = new Map<string, AnomalyRow>();
@@ -43,7 +55,7 @@ export function TransactionsSection({
       paymentMethods.map((row) => [row.method ?? '__none__', Number(row.expense)]),
     );
     const map = new Map<string | null, TransactionRecord[]>();
-    for (const tx of transactions) {
+    for (const tx of filteredTransactions) {
       const key = tx.paymentMethod;
       const list = map.get(key);
       if (list) list.push(tx);
@@ -56,7 +68,7 @@ export function TransactionsSection({
         expense: expenseByMethod.get(method ?? '__none__') ?? 0,
       }))
       .sort((a, b) => b.expense - a.expense);
-  }, [transactions, paymentMethods]);
+  }, [filteredTransactions, paymentMethods]);
 
   async function confirmTransaction(id: string) {
     setConfirmingId(id);
@@ -107,9 +119,22 @@ export function TransactionsSection({
 
   return (
     <section className="section">
-      <h2>Transações do mês por forma de pagamento</h2>
+      <div className="section-head">
+        <h2>Transações do mês por forma de pagamento</h2>
+        {members.length > 0 ? (
+          <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)}>
+            <option value="">Todos os membros</option>
+            <option value={SHARED_FILTER}>Conjunta / Compartilhada</option>
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+      </div>
       {error ? <ErrorBox>{error}</ErrorBox> : null}
-      {transactions.length === 0 ? (
+      {filteredTransactions.length === 0 ? (
         <Card>
           <p className="empty">Nenhuma transação neste mês.</p>
         </Card>
@@ -130,6 +155,7 @@ export function TransactionsSection({
                     <th>Descrição</th>
                     <th>Categoria</th>
                     <th>Conta</th>
+                    <th>Membro</th>
                     <th>Status</th>
                     <th className="td-num">Valor</th>
                     {canManage ? <th>Ações</th> : null}
@@ -154,6 +180,13 @@ export function TransactionsSection({
                           )}
                         </td>
                         <td className="muted">{tx.account?.name ?? '—'}</td>
+                        <td>
+                          {tx.member ? (
+                            <Badge tone="neutral">{tx.member.name}</Badge>
+                          ) : (
+                            <span className="muted">Conjunta</span>
+                          )}
+                        </td>
                         <td>
                           <Badge tone={statusTone(tx.status)}>{statusLabel(tx.status)}</Badge>
                           {anomalyById.has(tx.id) ? (

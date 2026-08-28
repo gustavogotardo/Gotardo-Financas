@@ -144,6 +144,7 @@ model User {
   family                 Family             @relation(fields: [familyId], references: [id])
   refreshTokens          RefreshToken[]
   notifications          Notification[]
+  transactions           Transaction[]
   mutedNotificationTypes NotificationType[] @default([])
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
@@ -359,6 +360,8 @@ model Transaction {
   suggestedCategory   Category?         @relation("TransactionSuggestedCategory", fields: [suggestedCategoryId], references: [id], onDelete: SetNull)
   envelopeId          String?
   envelope            Envelope?         @relation(fields: [envelopeId], references: [id])
+  memberId            String?
+  member              User?             @relation(fields: [memberId], references: [id], onDelete: SetNull)
   incomeSourceId      String?
   incomeSource        IncomeSource?     @relation(fields: [incomeSourceId], references: [id])
   documentId          String?
@@ -383,6 +386,7 @@ model Transaction {
   @@index([categoryId])
   @@index([suggestedCategoryId])
   @@index([envelopeId])
+  @@index([memberId])
   @@index([incomeSourceId])
   @@index([date])
   @@index([installmentGroupId])

@@ -70,6 +70,8 @@ export type TransactionRecord = {
   account: { id: string; name: string } | null;
   category: { id: string; name: string; parentId: string | null } | null;
   suggestedCategory: { id: string; name: string } | null;
+  memberId: string | null;
+  member: { id: string; name: string } | null;
   createdAt: string;
 };
 
@@ -137,6 +139,7 @@ export type CreateTransactionInput = {
   accountId: string;
   categoryId?: string;
   incomeSourceId?: string;
+  memberId?: string;
   paymentMethod?: string;
   date: string;
   installments?: number;

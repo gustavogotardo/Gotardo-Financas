@@ -6,6 +6,7 @@ import {
   type AccountRecord,
   type CategoryRecord,
   type CreateTransactionInput,
+  type FamilyMember,
   type IncomeSourceRecord,
 } from '@/lib/api';
 import { paymentMethodLabel, statusLabel, transactionTypeLabel } from '@/lib/format';
@@ -20,6 +21,7 @@ type Props = {
   accounts: AccountRecord[];
   categories: CategoryRecord[];
   incomeSources: IncomeSourceRecord[];
+  members: FamilyMember[];
   onCreated: () => Promise<void>;
   onCancel: () => void;
 };
@@ -28,11 +30,17 @@ export function TransactionForm({
   accounts,
   categories,
   incomeSources,
+  members,
   onCreated,
   onCancel,
 }: Props) {
   const [form, setForm] = useState<
-    CreateTransactionInput & { paymentMethod: string; categoryId: string; incomeSourceId: string }
+    CreateTransactionInput & {
+      paymentMethod: string;
+      categoryId: string;
+      incomeSourceId: string;
+      memberId: string;
+    }
   >({
     description: '',
     amount: 0,
@@ -42,6 +50,7 @@ export function TransactionForm({
     accountId: accounts[0]?.id ?? '',
     categoryId: '',
     incomeSourceId: '',
+    memberId: '',
     date: new Date().toISOString().slice(0, 10),
   });
   const [installments, setInstallments] = useState('');
@@ -66,6 +75,7 @@ export function TransactionForm({
         date: `${form.date}T12:00:00.000Z`,
         ...(form.categoryId ? { categoryId: form.categoryId } : {}),
         ...(form.incomeSourceId ? { incomeSourceId: form.incomeSourceId } : {}),
+        ...(form.memberId ? { memberId: form.memberId } : {}),
         ...(form.paymentMethod ? { paymentMethod: form.paymentMethod } : {}),
         ...(Number(installments) >= 2 ? { installments: Number(installments) } : {}),
       };
@@ -148,6 +158,16 @@ export function TransactionForm({
               {[...parents, ...children].map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.parentId ? `— ${category.name}` : category.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Membro">
+            <Select value={form.memberId} onChange={(e) => update('memberId', e.target.value)}>
+              <option value="">Conjunta / Compartilhada</option>
+              {members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}
                 </option>
               ))}
             </Select>

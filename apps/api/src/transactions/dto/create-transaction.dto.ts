@@ -19,7 +19,8 @@ import { PaymentMethod, TransactionSource, TransactionStatus, TransactionType } 
 // um id — sem isso, "" passa direto pela checagem de posse (ensureOptionalRefs
 // trata string vazia como falsy e pula) e quebra no Prisma com FK constraint
 // (500 não tratado) em vez de simplesmente ser ignorada como "não informado".
-const emptyStringToUndefined = ({ value }: { value: unknown }) => (value === '' ? undefined : value);
+const emptyStringToUndefined = ({ value }: { value: unknown }) =>
+  value === '' ? undefined : value;
 
 export class CreateTransactionDto {
   @IsString()
@@ -39,6 +40,11 @@ export class CreateTransactionDto {
   @Transform(emptyStringToUndefined)
   @IsString()
   incomeSourceId?: string;
+
+  @IsOptional()
+  @Transform(emptyStringToUndefined)
+  @IsString()
+  memberId?: string;
 
   @IsString()
   @MinLength(1)

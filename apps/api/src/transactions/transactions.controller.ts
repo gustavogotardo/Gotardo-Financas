@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { FamilyRole } from '@gotardo/db';
 import { TransactionsService, type TransactionRecord } from './transactions.service';
 import type { AuthUser } from '../common/auth-user';
@@ -12,8 +12,11 @@ export class TransactionsController {
   constructor(private readonly transactions: TransactionsService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser): Promise<TransactionRecord[]> {
-    return this.transactions.list(user);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('memberId') memberId?: string,
+  ): Promise<TransactionRecord[]> {
+    return this.transactions.list(user, memberId);
   }
 
   @Roles(FamilyRole.OWNER, FamilyRole.ADMIN)

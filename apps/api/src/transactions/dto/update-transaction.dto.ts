@@ -39,6 +39,11 @@ export class UpdateTransactionDto {
   incomeSourceId?: string | null;
 
   @IsOptional()
+  @Transform(emptyStringToNull)
+  @IsString()
+  memberId?: string | null;
+
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(300)

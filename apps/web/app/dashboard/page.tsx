@@ -151,6 +151,7 @@ export default function DashboardPage() {
             accounts={data.accounts}
             categories={data.categories}
             incomeSources={data.incomeSources}
+            members={data.members}
             onCancel={() => setShowForm(false)}
             onCreated={async () => {
               setShowForm(false);
@@ -273,6 +274,7 @@ export default function DashboardPage() {
               transactions={monthTransactions}
               paymentMethods={data.paymentMethods}
               anomalies={data.anomalies}
+              members={data.members}
               canManage={canManage}
               onReload={reload}
             />

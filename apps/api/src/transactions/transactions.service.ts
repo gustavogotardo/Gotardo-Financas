@@ -12,6 +12,7 @@ const TX_INCLUDE = {
   account: { select: { id: true, name: true, type: true, currency: true } },
   category: { select: { id: true, name: true, parentId: true } },
   suggestedCategory: { select: { id: true, name: true } },
+  member: { select: { id: true, name: true } },
 } as const;
 
 export type TransactionRecord = Prisma.TransactionGetPayload<{ include: typeof TX_INCLUDE }>;
@@ -23,9 +24,9 @@ export class TransactionsService {
     private readonly suggester: CategorySuggesterService,
   ) {}
 
-  list(user: AuthUser): Promise<TransactionRecord[]> {
+  list(user: AuthUser, memberId?: string): Promise<TransactionRecord[]> {
     return this.prisma.transaction.findMany({
-      where: { familyId: user.familyId, deletedAt: null },
+      where: { familyId: user.familyId, deletedAt: null, ...(memberId && { memberId }) },
       include: TX_INCLUDE,
       orderBy: { date: 'desc' },
     });
@@ -33,7 +34,13 @@ export class TransactionsService {
 
   async create(user: AuthUser, dto: CreateTransactionDto): Promise<TransactionRecord> {
     await this.ensureAccount(user, dto.accountId);
-    await this.ensureOptionalRefs(user, dto.categoryId, dto.envelopeId, dto.incomeSourceId);
+    await this.ensureOptionalRefs(
+      user,
+      dto.categoryId,
+      dto.envelopeId,
+      dto.incomeSourceId,
+      dto.memberId,
+    );
     const suggestedCategoryId = dto.categoryId
       ? undefined
       : await this.suggester.suggest(user.familyId, dto.description);
@@ -57,6 +64,7 @@ export class TransactionsService {
           suggestedCategoryId,
           envelopeId: dto.envelopeId,
           incomeSourceId: dto.incomeSourceId,
+          memberId: dto.memberId,
           description: dto.description,
           amount: dto.amount,
           type,
@@ -103,6 +111,7 @@ export class TransactionsService {
             suggestedCategoryId,
             envelopeId: dto.envelopeId,
             incomeSourceId: dto.incomeSourceId,
+            memberId: dto.memberId,
             description: dto.description,
             amount: amounts[i]!,
             type,
@@ -149,6 +158,7 @@ export class TransactionsService {
       dto.categoryId ?? current.categoryId,
       dto.envelopeId ?? current.envelopeId,
       dto.incomeSourceId ?? current.incomeSourceId,
+      dto.memberId ?? current.memberId,
     );
     const wasConfirmed = current.status === TransactionStatus.CONFIRMED;
     const willBeConfirmed = nextStatus === TransactionStatus.CONFIRMED;
@@ -172,6 +182,9 @@ export class TransactionsService {
     if (dto.incomeSourceId !== undefined) {
       sharedChanges.incomeSourceId = dto.incomeSourceId;
     }
+    if (dto.memberId !== undefined) {
+      sharedChanges.memberId = dto.memberId;
+    }
     if (dto.paymentMethod !== undefined) {
       sharedChanges.paymentMethod = dto.paymentMethod;
     }
@@ -186,6 +199,7 @@ export class TransactionsService {
           categoryId: dto.categoryId,
           envelopeId: dto.envelopeId,
           incomeSourceId: dto.incomeSourceId,
+          memberId: dto.memberId,
           date: dto.date,
           type: dto.type,
           status: dto.status,
@@ -242,6 +256,7 @@ export class TransactionsService {
     categoryId?: string | null,
     envelopeId?: string | null,
     incomeSourceId?: string | null,
+    memberId?: string | null,
   ): Promise<void> {
     if (categoryId) {
       const category = await this.prisma.category.findFirst({
@@ -265,6 +280,14 @@ export class TransactionsService {
       });
       if (!incomeSource) {
         throw new NotFoundException('Fonte de renda não encontrada');
+      }
+    }
+    if (memberId) {
+      const member = await this.prisma.user.findFirst({
+        where: { id: memberId, familyId: user.familyId },
+      });
+      if (!member) {
+        throw new NotFoundException('Membro não encontrado');
       }
     }
   }
