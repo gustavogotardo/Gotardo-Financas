@@ -62,7 +62,9 @@ pnpm --filter @gotardo/db db:migrate   # nova migration de desenvolvimento
 pnpm --filter @gotardo/db db:deploy    # aplica migrations (prod)
 pnpm --filter @gotardo/db db:studio    # Prisma Studio
 
-# testes de integração da API (exige infra + banco gotardo_test)
+# testes de integração da API (exige as duas stacks + banco gotardo_test)
+make infra-up        # stack de dev (os e2e usam o Redis/MinIO dela)
+make test-up         # stack de testes (postgres :5433, redis :6380, minio :9100)
 make test-db-setup   # cria o banco de teste e aplica migrations
 
 # validações Python

@@ -34,9 +34,10 @@ pnpm --filter @gotardo/db db:migrate   # new dev migration
 pnpm --filter @gotardo/db db:deploy    # apply migrations (prod)
 pnpm --filter @gotardo/db db:studio
 
-# API e2e tests need real infra + a gotardo_test database
-make infra-up          # postgres, redis, minio for local dev (compose.dev.yaml)
-make test-db-setup     # creates gotardo_test db and applies migrations
+# API e2e tests need TWO stacks + a gotardo_test database
+make infra-up          # dev stack (compose.dev.yaml: postgres :5432, redis :6379, minio :9000) — e2e specs fall back to its Redis/MinIO
+make test-up           # test stack (compose.test.yaml: postgres :5433, redis :6380, minio :9100) — required before test-db-setup
+make test-db-setup     # creates gotardo_test db on the test postgres and applies migrations (execs into gotardo-test-postgres-1)
 # then: pnpm --filter @gotardo/api test  (src/e2e/*.e2e.spec.ts run via the same jest config)
 
 # Python services (services/ml, services/ocr — managed with uv)
@@ -50,7 +51,9 @@ make prod-logs
 make prod-backup
 ```
 
-Node >= 20, pnpm >= 9, Python >= 3.11 required. Copy `.env.example` to `.env` before running `make infra-up`.
+Node >= 20, pnpm >= 9, Python >= 3.11 required. Copy `.env.example` to `.env` (repo root) before running `make infra-up`.
+
+The single `.env` lives at the repo root. The API (`ConfigModule` `envFilePath` in `app.module.ts`) and the `@gotardo/db` scripts (`db:migrate`/`db:deploy`/`db:studio`, via `dotenv-cli`) load it explicitly because their cwd is `apps/api` / `packages/db`. Turborepo runs tasks in strict env mode (no `env`/`passThroughEnv` in `turbo.json`), so exporting variables in your shell does **not** reach `pnpm dev` — rely on the `.env` file. MinIO images come from `quay.io/minio/*` (they are no longer published on Docker Hub).
 
 ## Architecture
 
