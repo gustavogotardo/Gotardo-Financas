@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import type { AccountRecord } from '@/lib/api';
+import { apiFetch, type AccountRecord } from '@/lib/api';
 import { accountTypeLabel, brl } from '@/lib/format';
-import { Button, Card } from '@/components/ui';
+import { Button, Card, ErrorBox, Field, Input } from '@/components/ui';
 import { AccountForm } from '@/components/account-form';
 import { InvoiceView } from '@/components/invoice-view';
 
@@ -13,10 +13,88 @@ type Props = {
   onReload: () => Promise<void>;
 };
 
+// Não existe um campo de saldo editável na conta — o saldo é sempre derivado
+// da soma das transações confirmadas (ver balanceDelta() na API). Para
+// reconciliar com o banco de verdade (ex.: depois de importar um extrato que
+// não cobre todo o histórico), este formulário lança uma transação de ajuste
+// confirmada pela diferença, em vez de escrever direto no saldo.
+function BalanceAdjustForm({
+  account,
+  onCancel,
+  onDone,
+}: {
+  account: AccountRecord;
+  onCancel: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const [value, setValue] = useState(account.balance);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function onSubmit() {
+    setError(null);
+    const target = Number(value.replace(',', '.'));
+    if (Number.isNaN(target)) {
+      setError('Informe um valor numérico válido.');
+      return;
+    }
+    const delta = target - Number(account.balance);
+    if (delta === 0) {
+      onCancel();
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await apiFetch('/api/v1/transactions', {
+        method: 'POST',
+        body: JSON.stringify({
+          description: 'Ajuste de saldo',
+          amount: Math.abs(delta),
+          type: delta >= 0 ? 'INCOME' : 'EXPENSE',
+          status: 'CONFIRMED',
+          accountId: account.id,
+          date: new Date().toISOString(),
+        }),
+      });
+      await onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao ajustar o saldo.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card className="form-card">
+      <h3 className="form-title">Ajustar saldo de &quot;{account.name}&quot;</h3>
+      <div className="form-grid">
+        <Field label="Saldo correto (R$)" hint="Lança uma transação de ajuste pela diferença">
+          <Input
+            type="number"
+            step="0.01"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </Field>
+      </div>
+      {error ? <ErrorBox>{error}</ErrorBox> : null}
+      <div className="form-actions">
+        <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>
+          Cancelar
+        </Button>
+        <Button type="button" onClick={() => void onSubmit()} disabled={submitting}>
+          {submitting ? 'Salvando…' : 'Ajustar'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export function AccountsSection({ accounts, canManage, onReload }: Props) {
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountRecord | null>(null);
   const [invoiceAccount, setInvoiceAccount] = useState<AccountRecord | null>(null);
+  const [adjustingAccount, setAdjustingAccount] = useState<AccountRecord | null>(null);
 
   return (
     <section className="section">
@@ -55,6 +133,17 @@ export function AccountsSection({ accounts, canManage, onReload }: Props) {
           onCancel={() => setShowAccountForm(false)}
           onDone={async () => {
             setShowAccountForm(false);
+            await onReload();
+          }}
+        />
+      ) : null}
+      {adjustingAccount ? (
+        <BalanceAdjustForm
+          key={adjustingAccount.id}
+          account={adjustingAccount}
+          onCancel={() => setAdjustingAccount(null)}
+          onDone={async () => {
+            setAdjustingAccount(null);
             await onReload();
           }}
         />
@@ -105,6 +194,19 @@ export function AccountsSection({ accounts, canManage, onReload }: Props) {
                           }}
                         >
                           Editar
+                        </Button>
+                      ) : null}
+                      {canManage ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() =>
+                            setAdjustingAccount((current) =>
+                              current?.id === account.id ? null : account,
+                            )
+                          }
+                        >
+                          Ajustar saldo
                         </Button>
                       ) : null}
                     </td>

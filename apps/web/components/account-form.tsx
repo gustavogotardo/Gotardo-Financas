@@ -23,6 +23,7 @@ export function AccountForm({ account, onDone, onCancel }: Props) {
     billingDay: account?.billingDay ?? undefined,
     dueDay: account?.dueDay ?? undefined,
   });
+  const [openingBalance, setOpeningBalance] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -34,21 +35,43 @@ export function AccountForm({ account, onDone, onCancel }: Props) {
     try {
       if (isEdit && !account) return;
       const accountId = account?.id ?? '';
-      await apiFetch(isEdit ? `/api/v1/accounts/${accountId}` : '/api/v1/accounts', {
-        method: isEdit ? 'PATCH' : 'POST',
-        body: JSON.stringify({
-          name: form.name,
-          type: form.type,
-          ...(form.institution ? { institution: form.institution } : {}),
-          ...(form.type === 'CREDIT_CARD' && form.creditLimit
-            ? { creditLimit: form.creditLimit }
-            : {}),
-          ...(form.type === 'CREDIT_CARD' && form.billingDay
-            ? { billingDay: form.billingDay }
-            : {}),
-          ...(form.type === 'CREDIT_CARD' && form.dueDay ? { dueDay: form.dueDay } : {}),
-        }),
-      });
+      const saved = await apiFetch<{ id: string }>(
+        isEdit ? `/api/v1/accounts/${accountId}` : '/api/v1/accounts',
+        {
+          method: isEdit ? 'PATCH' : 'POST',
+          body: JSON.stringify({
+            name: form.name,
+            type: form.type,
+            ...(form.institution ? { institution: form.institution } : {}),
+            ...(form.type === 'CREDIT_CARD' && form.creditLimit
+              ? { creditLimit: form.creditLimit }
+              : {}),
+            ...(form.type === 'CREDIT_CARD' && form.billingDay
+              ? { billingDay: form.billingDay }
+              : {}),
+            ...(form.type === 'CREDIT_CARD' && form.dueDay ? { dueDay: form.dueDay } : {}),
+          }),
+        },
+      );
+      // Não há campo de saldo na conta em si — o saldo é sempre a soma das
+      // transações confirmadas (ver balanceDelta() na API). Para dar à conta
+      // nova o saldo que ela já tinha no banco antes de existir aqui, lança
+      // uma transação de ajuste confirmada, pelo mesmo caminho que qualquer
+      // outra transação usa.
+      const openingValue = Number(openingBalance.replace(',', '.'));
+      if (!isEdit && openingValue) {
+        await apiFetch('/api/v1/transactions', {
+          method: 'POST',
+          body: JSON.stringify({
+            description: 'Saldo inicial',
+            amount: Math.abs(openingValue),
+            type: openingValue >= 0 ? 'INCOME' : 'EXPENSE',
+            status: 'CONFIRMED',
+            accountId: saved.id,
+            date: new Date().toISOString(),
+          }),
+        });
+      }
       await onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao salvar a conta.');
@@ -104,6 +127,20 @@ export function AccountForm({ account, onDone, onCancel }: Props) {
               maxLength={100}
             />
           </Field>
+          {!isEdit ? (
+            <Field
+              label="Saldo inicial (R$)"
+              hint="O saldo que a conta já tem hoje no banco, antes de qualquer transação lançada aqui"
+            >
+              <Input
+                type="number"
+                step="0.01"
+                value={openingBalance}
+                onChange={(e) => setOpeningBalance(e.target.value)}
+                placeholder="0,00"
+              />
+            </Field>
+          ) : null}
           {form.type === 'CREDIT_CARD' ? (
             <>
               <Field label="Limite (R$)">
