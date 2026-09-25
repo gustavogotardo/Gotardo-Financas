@@ -5,12 +5,15 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import request from 'supertest';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import ExcelJS from 'exceljs';
 import { PrismaModule, PrismaService } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { AccountsModule } from '../accounts/accounts.module';
 import { StorageModule } from '../storage/storage.module';
 import { ImportsModule } from '../imports/imports.module';
+import { TransactionsModule } from '../transactions/transactions.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -50,6 +53,68 @@ VERSION:102
 </STMTRS>
 </STMTTRNRS>
 </BANKMSGSRSV1>
+</OFX>`;
+
+// Amostra reduzida, baseada num extrato real do Bradesco: tags SGML antigas,
+// sem fechamento (</STMTTRN> em vez de valor fechado), e o MEMO carregando a
+// forma de pagamento + "Des:"/"Rem:" + data duplicada, exatamente como o
+// banco exporta. Cobre os prefixos reconhecidos (Pix Des:/Rem:, Compra Cart
+// Elo, Pagto Cobranca, Gasto c Credito) e um caso não reconhecido (Trans Sal)
+// para garantir que o fallback preserva o texto original.
+const OFX_BRADESCO_SAMPLE = `OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+<OFX>
+	<BANKMSGSRSV1>
+		<STMTTRNRS>
+			<STMTRS>
+				<BANKTRANLIST>
+					<STMTTRN>
+						<TRNTYPE>CREDIT
+						<DTPOSTED>20260901000000[-03:EST]
+						<TRNAMT>8551.93
+						<FITID>N20063
+						<MEMO>Trans Sal p/c/c Dep.transit.floating Berj
+					</STMTTRN>
+					<STMTTRN>
+						<TRNTYPE>DEBIT
+						<DTPOSTED>20260904000000[-03:EST]
+						<TRNAMT>-19.67
+						<FITID>N20080
+						<MEMO>Compra Cart Elo Supermercado Supremo
+					</STMTTRN>
+					<STMTTRN>
+						<TRNTYPE>DEBIT
+						<DTPOSTED>20260904000000[-03:EST]
+						<TRNAMT>-9.50
+						<FITID>N2009E
+						<MEMO>Pix Qrcode Est Des: Alex Bello Quintella 04/09
+					</STMTTRN>
+					<STMTTRN>
+						<TRNTYPE>CREDIT
+						<DTPOSTED>20260909000000[-03:EST]
+						<TRNAMT>270.53
+						<FITID>N20152
+						<MEMO>Pix Recebido Rem: Joao Gabriel Moncao 09/09
+					</STMTTRN>
+					<STMTTRN>
+						<TRNTYPE>DEBIT
+						<DTPOSTED>20260910000000[-03:EST]
+						<TRNAMT>-395.00
+						<FITID>N201AA
+						<MEMO>Pagto Cobranca Escola Integral Felipe 09/2026
+					</STMTTRN>
+					<STMTTRN>
+						<TRNTYPE>DEBIT
+						<DTPOSTED>20260910000000[-03:EST]
+						<TRNAMT>-665.20
+						<FITID>N201E6
+						<MEMO>Gasto c Credito
+					</STMTTRN>
+				</BANKTRANLIST>
+			</STMTRS>
+		</STMTTRNRS>
+	</BANKMSGSRSV1>
 </OFX>`;
 
 // Builds a real .xlsx workbook (via exceljs) with typed cells, mirroring what
@@ -105,6 +170,7 @@ describe('Importação de extratos (e2e)', () => {
         AuthModule,
         AccountsModule,
         ImportsModule,
+        TransactionsModule,
       ],
       providers: [
         { provide: APP_GUARD, useClass: JwtAuthGuard },
@@ -198,8 +264,50 @@ describe('Importação de extratos (e2e)', () => {
     expect(resgate?.amount.toString()).toBe('329.63');
     expect(resgate?.type).toBe('INCOME');
     expect(resgate?.date.toISOString().slice(0, 10)).toBe('2026-01-05');
-    expect(boleto?.amount.toString()).toBe('-25');
+    // amount é sempre a magnitude positiva da transação — o sinal vem do
+    // `type`, nunca do valor em si (mesma convenção do CreateTransactionDto,
+    // que rejeita amount negativo). Uma despesa importada com amount negativo
+    // faz confirmTransaction() somar ao saldo da conta em vez de subtrair.
+    expect(boleto?.amount.toString()).toBe('25');
     expect(boleto?.type).toBe('EXPENSE');
+  });
+
+  it('confirmar despesas e receitas importadas atualiza o saldo da conta corretamente', async () => {
+    // Regressão: os parsers guardavam o amount de despesas já negativo (vindo
+    // do sinal do banco), e balanceDelta() negava de novo — confirmar uma
+    // despesa importada SOMAVA ao saldo em vez de subtrair.
+    const email = emailFor('imp-saldo');
+    const reg = await register('Imp Saldo', email, `Família Imp Saldo ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    const family = (meRes.body as MeResponse).familyId;
+    createdFamilies.push(family);
+
+    const account = await createAccount(tokens.accessToken, 'Conta Saldo');
+    const accountId = (account.body as { id: string }).id;
+
+    const upload = await request(app.getHttpServer())
+      .post('/api/v1/imports')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .field('accountId', accountId)
+      .attach('file', Buffer.from(CSV_SAMPLE, 'utf8'), 'extrato.csv');
+    expect(upload.status).toBe(201);
+    const imported = upload.body as { id: string };
+
+    const transactions = await prisma.transaction.findMany({
+      where: { documentId: imported.id },
+    });
+    for (const tx of transactions) {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/transactions/${tx.id}`)
+        .set('Authorization', `Bearer ${tokens.accessToken}`)
+        .send({ status: 'CONFIRMED' });
+      expect(res.status).toBe(200);
+    }
+
+    // CSV_SAMPLE: -18,50 + 3250,00 - 120,30 = 3111,20
+    const updatedAccount = await prisma.account.findFirstOrThrow({ where: { id: accountId } });
+    expect(updatedAccount.balance.toString()).toBe('3111.2');
   });
 
   it('deduplica ao importar o mesmo CSV de novo', async () => {
@@ -261,8 +369,77 @@ describe('Importação de extratos (e2e)', () => {
     expect(transactions).toHaveLength(2);
     expect(transactions[0]?.externalId).toBe('OFX001');
     expect(transactions[0]?.type).toBe('EXPENSE');
+    // OFX manda TRNAMT já negativo para débitos ("-45,90") — mesma normalização
+    // do CSV/XLSX: amount fica com a magnitude positiva, o sinal é só o type.
+    expect(transactions[0]?.amount.toString()).toBe('45.9');
     expect(transactions[1]?.externalId).toBe('OFX002');
     expect(transactions[1]?.type).toBe('INCOME');
+    expect(transactions[1]?.amount.toString()).toBe('150');
+  });
+
+  it('importa OFX do Bradesco e separa forma de pagamento/destinatário do MEMO', async () => {
+    const email = emailFor('imp-ofx-bradesco');
+    const reg = await register('Imp OFX Bradesco', email, `Família Imp OFX Bradesco ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    const family = (meRes.body as MeResponse).familyId;
+    createdFamilies.push(family);
+
+    const account = await createAccount(tokens.accessToken, 'Conta Bradesco OFX');
+    const accountId = (account.body as { id: string }).id;
+
+    const upload = await request(app.getHttpServer())
+      .post('/api/v1/imports')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .field('accountId', accountId)
+      .attach('file', Buffer.from(OFX_BRADESCO_SAMPLE, 'utf8'), 'bradesco.ofx');
+
+    expect(upload.status).toBe(201);
+    const imported = upload.body as { id: string; status: string; transactionCount: number };
+    expect(imported.status).toBe('PROCESSED');
+    expect(imported.transactionCount).toBe(6);
+
+    const byFitid = new Map(
+      (
+        await prisma.transaction.findMany({ where: { documentId: imported.id } })
+      ).map((tx) => [tx.externalId, tx]),
+    );
+
+    // Sem "Des:"/"Rem:" e sem prefixo reconhecido: mantém o MEMO inteiro e
+    // não classifica forma de pagamento (nunca perde informação).
+    const salario = byFitid.get('N20063');
+    expect(salario?.description).toBe('trans sal p/c/c dep.transit.floating berj');
+    expect(salario?.paymentMethod).toBeNull();
+
+    // "Compra Cart Elo <estabelecimento>" — bandeira e "Compra Cart" saem da
+    // descrição, viram DEBIT_CARD.
+    const compra = byFitid.get('N20080');
+    expect(compra?.description).toBe('supermercado supremo');
+    expect(compra?.paymentMethod).toBe('DEBIT_CARD');
+
+    // Pix enviado/QR code: "Des: <nome> <dd/mm>" — fica só o nome, sem a data
+    // duplicada (já está em tx.date).
+    const pixDes = byFitid.get('N2009E');
+    expect(pixDes?.description).toBe('alex bello quintella');
+    expect(pixDes?.paymentMethod).toBe('PIX');
+
+    // Pix recebido: "Rem: <nome> <dd/mm>" (remetente, não destinatário).
+    const pixRem = byFitid.get('N20152');
+    expect(pixRem?.description).toBe('joao gabriel moncao');
+    expect(pixRem?.paymentMethod).toBe('PIX');
+
+    // Boleto: "Pagto Cobranca <descrição>" — o prefixo sai, mas o mm/aaaa de
+    // referência no fim NÃO é removido (não é a data duplicada, é a
+    // competência do boleto).
+    const boleto = byFitid.get('N201AA');
+    expect(boleto?.description).toBe('escola integral felipe 09/2026');
+    expect(boleto?.paymentMethod).toBe('BOLETO');
+
+    // "Gasto c Credito" sem nada depois: sem detalhe extra pra extrair, mas
+    // ainda assim classificado como CREDIT_CARD.
+    const credito = byFitid.get('N201E6');
+    expect(credito?.description).toBe('gasto c credito');
+    expect(credito?.paymentMethod).toBe('CREDIT_CARD');
   });
 
   it('importa um XLSX e cria transações PENDING com source IMPORT', async () => {
@@ -294,7 +471,7 @@ describe('Importação de extratos (e2e)', () => {
     expect(transactions.every((tx) => tx.status === 'PENDING')).toBe(true);
     expect(transactions.every((tx) => tx.source === 'IMPORT')).toBe(true);
     const padaria = transactions.find((tx) => tx.description === 'padaria central');
-    expect(padaria?.amount.toString()).toBe('-18.5');
+    expect(padaria?.amount.toString()).toBe('18.5');
     expect(padaria?.type).toBe('EXPENSE');
     expect(padaria?.date.toISOString().slice(0, 10)).toBe('2026-08-01');
     // Regression: native Date cell with day-of-month > 12 (24) must not be
@@ -305,6 +482,43 @@ describe('Importação de extratos (e2e)', () => {
     // Regression: native numeric cell >= 1000 must not be corrupted 1000x by
     // string-based comma/dot amount guessing (was producing 3.2505).
     expect(salario?.amount.toString()).toBe('3250.5');
+  });
+
+  it('importa um PDF (extrato Itaú) e cria transações PENDING com source IMPORT', async () => {
+    const email = emailFor('imp-pdf');
+    const reg = await register('Imp PDF', email, `Família Imp PDF ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    const family = (meRes.body as MeResponse).familyId;
+    createdFamilies.push(family);
+
+    const account = await createAccount(tokens.accessToken, 'Conta Itaú');
+    const accountId = (account.body as { id: string }).id;
+
+    const fixture = readFileSync(
+      join(__dirname, '..', 'imports', 'parsers', '__fixtures__', 'itau-sample.pdf'),
+    );
+    const upload = await request(app.getHttpServer())
+      .post('/api/v1/imports')
+      .set('Authorization', `Bearer ${tokens.accessToken}`)
+      .field('accountId', accountId)
+      .attach('file', fixture, 'extrato.pdf');
+
+    expect(upload.status).toBe(201);
+    const imported = upload.body as { id: string; status: string; transactionCount: number };
+    expect(imported.status).toBe('PROCESSED');
+    // 9 linhas de dados na fixture, 4 "SALDO DO DIA" descartadas = 5 transações.
+    expect(imported.transactionCount).toBe(5);
+
+    const transactions = await prisma.transaction.findMany({
+      where: { documentId: imported.id },
+    });
+    expect(transactions.every((tx) => tx.status === 'PENDING')).toBe(true);
+    expect(transactions.every((tx) => tx.source === 'IMPORT')).toBe(true);
+    const boleto = transactions.find((tx) => tx.description === 'pag boleto energia eletrica');
+    expect(boleto?.amount.toString()).toBe('80');
+    expect(boleto?.type).toBe('EXPENSE');
+    expect(boleto?.paymentMethod).toBe('BOLETO');
   });
 
   it('rejeita formato não suportado', async () => {

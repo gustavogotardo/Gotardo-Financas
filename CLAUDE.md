@@ -84,7 +84,7 @@ Turborepo tasks (`turbo.json`) build `^build` before `lint`/`typecheck`/`test`, 
 - Prisma `Decimal` fields (money) are serialized as strings across the API boundary and in `packages/shared`/`apps/web` types — don't switch these to `number`.
 
 ### Imports & ML integration
-- `apps/api/src/imports` parses uploaded OFX/CSV bank statements (`ALLOWED_EXTENSIONS`, 5MB cap) into `Document` + `Transaction(source: IMPORT, status: REVIEW/PENDING)` records, using BullMQ (`Queue`/`Worker`, backed by Redis) for async processing and MinIO (`storage.service.ts`) for the raw file.
+- `apps/api/src/imports` parses uploaded OFX/CSV/XLSX bank statements, plus Itaú's PDF statement specifically (`parsers/pdf-itau.ts`, via `pdf2json` — text-embedded PDFs only, one parser per bank, no other bank supported yet) (`ALLOWED_EXTENSIONS`, 5MB cap) into `Document` + `Transaction(source: IMPORT, status: REVIEW/PENDING)` records, using BullMQ (`Queue`/`Worker`, backed by Redis) for async processing and MinIO (`storage.service.ts`) for the raw file.
 - `MlClient` (`apps/api/src/ml/ml.client.ts`) calls the Python `services/ml` FastAPI service over HTTP for category suggestions and anomaly flags. It is soft-fail by design: unset `ML_URL`, network errors, timeouts, or non-2xx responses all degrade to "no suggestion" rather than throwing — never make this a hard dependency when touching import/categorization code.
 - `Transaction.suggestedCategoryId` (ML's guess) is separate from `Transaction.categoryId` (confirmed); a suggestion never auto-writes the confirmed category.
 

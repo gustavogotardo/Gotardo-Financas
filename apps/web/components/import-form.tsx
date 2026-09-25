@@ -51,7 +51,7 @@ export function ImportForm({ accounts, onDone, onCancel }: Props) {
     e.preventDefault();
     setError(null);
     if (!file) {
-      setError('Selecione um arquivo OFX/QFX, CSV ou XLSX.');
+      setError('Selecione um arquivo OFX/QFX, CSV, XLSX ou PDF (extrato do Itaú).');
       return;
     }
     setSubmitting(true);
@@ -85,8 +85,8 @@ export function ImportForm({ accounts, onDone, onCancel }: Props) {
               ))}
             </Select>
           </Field>
-          <Field label="Arquivo (OFX/QFX, CSV ou XLSX)">
-            <input type="file" accept=".ofx,.qfx,.csv,.xlsx" onChange={onFileChange} />
+          <Field label="Arquivo (OFX/QFX, CSV, XLSX ou PDF do Itaú)">
+            <input type="file" accept=".ofx,.qfx,.csv,.xlsx,.pdf" onChange={onFileChange} />
           </Field>
         </div>
         {error ? <ErrorBox>{error}</ErrorBox> : null}

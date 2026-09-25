@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { normalizeDescription, typeFromAmount, type ParsedTransaction } from './types';
+import { normalizeDescription, typeFromAmount, unsignedAmount, type ParsedTransaction } from './types';
 
 export function decodeText(buffer: Buffer): string {
   const utf8 = buffer.toString('utf8');
@@ -199,11 +199,12 @@ export function parseCsv(content: string): ParsedTransaction[] {
     if (!amount || Number(amount) === 0) {
       continue;
     }
+    const type = typeFromAmount(amount);
     transactions.push({
       date,
       description,
-      amount,
-      type: typeFromAmount(amount),
+      amount: unsignedAmount(amount),
+      type,
     });
   }
   if (transactions.length === 0) {

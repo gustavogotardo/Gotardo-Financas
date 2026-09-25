@@ -17,9 +17,10 @@ import { StorageService } from '../storage/storage.service';
 import { parseCsv, decodeText } from './parsers/csv';
 import { parseOfx } from './parsers/ofx';
 import { parseXlsx } from './parsers/xlsx';
+import { parseItauPdf } from './parsers/pdf-itau';
 import { normalizeDescription, type ParsedTransaction } from './parsers/types';
 
-const ALLOWED_EXTENSIONS = new Set(['ofx', 'qfx', 'csv', 'xlsx']);
+const ALLOWED_EXTENSIONS = new Set(['ofx', 'qfx', 'csv', 'xlsx', 'pdf']);
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const DOCUMENT_SELECT = {
@@ -149,6 +150,9 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
         parsed = parseCsv(decodeText(buffer));
       } else if (ext === 'xlsx') {
         parsed = await parseXlsx(buffer);
+      } else if (ext === 'pdf') {
+        // Só o extrato do Itaú por enquanto — ver parsers/pdf-itau.ts.
+        parsed = await parseItauPdf(buffer);
       } else {
         parsed = parseOfx(decodeText(buffer));
       }

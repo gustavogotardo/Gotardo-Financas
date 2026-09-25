@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import { detectHeaderIndex, findColumn, parseAmount, parseBrDate } from './csv';
-import { normalizeDescription, typeFromAmount, type ParsedTransaction } from './types';
+import { normalizeDescription, typeFromAmount, unsignedAmount, type ParsedTransaction } from './types';
 
 /**
  * A cell value resolved to a "primitive" shape: native Date/number/string, or
@@ -226,11 +226,12 @@ export async function parseXlsx(buffer: Buffer): Promise<ParsedTransaction[]> {
     if (Number(amount) === 0) {
       continue;
     }
+    const type = typeFromAmount(amount);
     transactions.push({
       date,
       description,
-      amount,
-      type: typeFromAmount(amount),
+      amount: unsignedAmount(amount),
+      type,
     });
   }
   if (transactions.length === 0) {
