@@ -273,6 +273,7 @@ export default function DashboardPage() {
             <TransactionsSection
               transactions={monthTransactions}
               paymentMethods={data.paymentMethods}
+              categories={data.categories}
               anomalies={data.anomalies}
               members={data.members}
               canManage={canManage}

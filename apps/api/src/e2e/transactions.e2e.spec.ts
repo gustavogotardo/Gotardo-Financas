@@ -210,3 +210,138 @@ describe('Transações: atribuição de membro (e2e)', () => {
     expect(list[0]?.description).toBe('Pessoal');
   });
 });
+
+// A UI passou a permitir editar/excluir transações já CONFIRMED (antes só
+// dava pra mexer em PENDING) — o backend já suportava isso (ver
+// balanceDelta()/applyDelta() em transactions.service.ts), mas nada cobria
+// esse caminho especificamente. Regressão direta para a correção do saldo.
+describe('Transações confirmadas: editar e excluir ajustam o saldo (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  const suffix = randomUUID().slice(0, 8);
+  const domain = `${suffix}.e2e.gotardo.confirmed`;
+  const createdFamilies: string[] = [];
+
+  const emailFor = (tag: string): string => `${tag}@${domain}`;
+
+  const register = (name: string, email: string, familyName: string) =>
+    request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({ name, email, password: 'senha-segura-123', familyName });
+
+  const me = (token: string) =>
+    request(app.getHttpServer()).get('/api/v1/auth/me').set('Authorization', `Bearer ${token}`);
+
+  const setupFamily = async (tag: string) => {
+    const email = emailFor(tag);
+    const reg = await register(tag, email, `Família ${tag} ${suffix}`);
+    const tokens = reg.body as TokensResponse;
+    const meRes = await me(tokens.accessToken);
+    const { familyId } = meRes.body as MeResponse;
+    createdFamilies.push(familyId);
+    return { token: tokens.accessToken, familyId };
+  };
+
+  const getAccountBalance = async (token: string, accountId: string): Promise<string> => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/accounts')
+      .set('Authorization', `Bearer ${token}`);
+    const accounts = res.body as Array<{ id: string; balance: string }>;
+    return accounts.find((a) => a.id === accountId)!.balance;
+  };
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
+        PrismaModule,
+        AuthModule,
+        AccountsModule,
+        TransactionsModule,
+      ],
+      providers: [
+        { provide: APP_GUARD, useClass: JwtAuthGuard },
+        { provide: APP_GUARD, useClass: RolesGuard },
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
+    );
+    await app.init();
+    prisma = moduleRef.get(PrismaService);
+  });
+
+  afterAll(async () => {
+    await prisma.$transaction([
+      prisma.transaction.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      prisma.account.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      prisma.notification.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      prisma.refreshToken.deleteMany({
+        where: { user: { familyId: { in: createdFamilies } } },
+      }),
+      prisma.user.deleteMany({ where: { familyId: { in: createdFamilies } } }),
+      prisma.family.deleteMany({ where: { id: { in: createdFamilies } } }),
+    ]);
+    await app.close();
+  });
+
+  it('editar o valor de uma transação CONFIRMED reajusta o saldo para o novo valor', async () => {
+    const { token } = await setupFamily('conf-edit');
+    const account = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Conta', type: 'CHECKING' });
+    const accountId = (account.body as { id: string }).id;
+
+    const tx = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        accountId,
+        description: 'Mercado',
+        amount: 100,
+        type: 'EXPENSE',
+        status: 'CONFIRMED',
+      });
+    const txId = (tx.body as { id: string }).id;
+    expect(await getAccountBalance(token, accountId)).toBe('-100');
+
+    const edited = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${txId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: 40 });
+    expect(edited.status).toBe(200);
+    expect(await getAccountBalance(token, accountId)).toBe('-40');
+  });
+
+  it('excluir uma transação CONFIRMED reverte o saldo', async () => {
+    const { token } = await setupFamily('conf-delete');
+    const account = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Conta', type: 'CHECKING' });
+    const accountId = (account.body as { id: string }).id;
+
+    const tx = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        accountId,
+        description: 'Salário',
+        amount: 500,
+        type: 'INCOME',
+        status: 'CONFIRMED',
+      });
+    const txId = (tx.body as { id: string }).id;
+    expect(await getAccountBalance(token, accountId)).toBe('500');
+
+    const removed = await request(app.getHttpServer())
+      .delete(`/api/v1/transactions/${txId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(removed.status).toBe(204);
+    expect(await getAccountBalance(token, accountId)).toBe('0');
+  });
+});

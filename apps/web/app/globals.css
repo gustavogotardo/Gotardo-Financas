@@ -275,6 +275,49 @@ a:hover {
   margin-left: 0.4rem;
 }
 
+/* Várias ações por linha (Confirmar/Editar/Cancelar) quebram em mais de uma
+   linha em vez de forçar a tabela a rolar horizontalmente e cortar os botões
+   fora da área visível do card. */
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.table-actions .btn {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.table-actions .btn + .btn {
+  margin-left: 0;
+}
+
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: var(--surface-muted, rgba(37, 99, 235, 0.06));
+  border-radius: 0.5rem;
+}
+
+.bulk-select-all {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.bulk-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
 .envelope-name {
   display: block;
   font-weight: 500;
@@ -326,6 +369,22 @@ a:hover {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.5rem;
+}
+
+.inline-edit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem 1rem;
+  align-items: end;
+  padding: 0.75rem;
+  background: var(--surface-muted, rgba(127, 127, 127, 0.08));
+  border-radius: 0.5rem;
+}
+
+.inline-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
 }
 
 .stat-grid {
